@@ -1,0 +1,329 @@
+{
+  "run_id": "glove_bilstm_lr5e-4_seed42_f0-1",
+  "name": "glove_bilstm_lr5e-4",
+  "model": "glove_bilstm",
+  "feature_format": "word_vectors",
+  "config": {
+    "arch": "bilstm",
+    "name": "glove_bilstm_lr5e-4",
+    "seed": 42,
+    "glove": "glove-wiki-gigaword-300",
+    "no_pretrained": false,
+    "freeze_emb_epochs": 1,
+    "min_count": 2,
+    "max_len": 160,
+    "head_frac": 0.75,
+    "hidden": 256,
+    "layers": 1,
+    "filters": 128,
+    "kernels": "3,4,5",
+    "dropout": 0.3,
+    "lr": 0.0005,
+    "weight_decay": 0.0,
+    "batch_size": 64,
+    "epochs": 15,
+    "patience": 3,
+    "max_grad_norm": 1.0,
+    "class_weight": "sqrt",
+    "device": "auto",
+    "folds": "0,1",
+    "limit": null,
+    "acc_slack": 0.003,
+    "no_save": false,
+    "allow_partial": true,
+    "partial": true
+  },
+  "protocol": {
+    "dedup": true,
+    "n_train": 7185,
+    "n_splits": 5,
+    "folds_run": [
+      0,
+      1
+    ],
+    "partial": true,
+    "fold_seed": 42,
+    "std_ddof": 0,
+    "threshold_rule": "max macro-F1 s.t. acc >= best-acc - 0.003; final threshold chosen on all OOF",
+    "model_selection": "best val macro-F1 @0.5 after each epoch on the held-out fold, early stopping patience 3 (the stop epoch itself depends on the held-out fold): optimistic; *_last = checkpoint at the stop epoch (best+3 or the --epochs cap), NOT selection-free (unlike train_plm's fixed schedule)",
+    "early_stopping": {
+      "patience": 3,
+      "suppressed_until_epoch": 1,
+      "folds_early_stopped": [
+        0,
+        1
+      ]
+    },
+    "vocabulary": "built per fold from the training folds only (words in GloVe count>=1, others count>=2); val/test unseen words -> <unk>; embeddings GloVe init"
+  },
+  "tokenization": {
+    "style": "lower-case, punctuation split, Stanford-style contractions (do n't, it 's)",
+    "max_len_words": 160,
+    "truncation": "head_tail",
+    "train_word_len_median": 48.0,
+    "train_word_len_p95": 166.0
+  },
+  "folds": [
+    {
+      "threshold": 0.5,
+      "accuracy": 0.919276270006959,
+      "macro_f1": 0.8407737981522379,
+      "f1_neg": 0.7289719626168224,
+      "precision_neg": 0.7123287671232876,
+      "recall_neg": 0.7464114832535885,
+      "f1_pos": 0.9525756336876533,
+      "roc_auc": 0.94354612471362,
+      "pr_auc_neg": 0.7960163489382692,
+      "tn": 156,
+      "fp": 53,
+      "fn": 63,
+      "tp": 1165,
+      "pred_pos_ratio": 0.8475991649269311,
+      "fold": 0,
+      "n_train": 5748,
+      "n_val": 1437,
+      "best_epoch": 10,
+      "epochs_run": 13,
+      "early_stopped": true,
+      "train_s": 72.87665862502763,
+      "eval_s": 2.736289458000101,
+      "infer_test_s": 0.3623447090067202,
+      "device_mem_mb": 4392.38656,
+      "vocab_vocab_size": 11534,
+      "vocab_types_in_train": 12918,
+      "vocab_types_in_glove": 11267,
+      "vocab_glove_init_fraction": 0.9770204647936177,
+      "vocab_train_token_coverage": 0.9963724684488507,
+      "vocab_unk_rate_val": 0.01638308435257481,
+      "vocab_unk_rate_test": 0.017583687967027445,
+      "vocab_frac_truncated_train": 0.055149617258176756
+    },
+    {
+      "threshold": 0.5,
+      "accuracy": 0.9227557411273486,
+      "macro_f1": 0.8502238093315393,
+      "f1_neg": 0.7459954233409611,
+      "precision_neg": 0.7180616740088106,
+      "recall_neg": 0.7761904761904762,
+      "f1_pos": 0.9544521953221173,
+      "roc_auc": 0.9466526953079519,
+      "pr_auc_neg": 0.825441413606099,
+      "tn": 163,
+      "fp": 47,
+      "fn": 64,
+      "tp": 1163,
+      "pred_pos_ratio": 0.8420320111343076,
+      "fold": 1,
+      "n_train": 5748,
+      "n_val": 1437,
+      "best_epoch": 5,
+      "epochs_run": 8,
+      "early_stopped": true,
+      "train_s": 44.558545875988784,
+      "eval_s": 1.7807165830017766,
+      "infer_test_s": 0.40225583298888523,
+      "device_mem_mb": 4779.180032,
+      "vocab_vocab_size": 11335,
+      "vocab_types_in_train": 12680,
+      "vocab_types_in_glove": 11093,
+      "vocab_glove_init_fraction": 0.9788229065560752,
+      "vocab_train_token_coverage": 0.9963998107695639,
+      "vocab_unk_rate_val": 0.018247910603879494,
+      "vocab_unk_rate_test": 0.017826626009449453,
+      "vocab_frac_truncated_train": 0.05340988169798191
+    }
+  ],
+  "folds_last": [
+    {
+      "threshold": 0.5,
+      "accuracy": 0.9144050104384134,
+      "macro_f1": 0.8260997468498897,
+      "f1_neg": 0.7021791767554479,
+      "precision_neg": 0.7107843137254902,
+      "recall_neg": 0.69377990430622,
+      "f1_pos": 0.9500203169443315,
+      "roc_auc": 0.9351709708087215,
+      "pr_auc_neg": 0.7684190740638396,
+      "tn": 145,
+      "fp": 64,
+      "fn": 59,
+      "tp": 1169,
+      "pred_pos_ratio": 0.8580375782881002,
+      "fold": 0
+    },
+    {
+      "threshold": 0.5,
+      "accuracy": 0.9234516353514266,
+      "macro_f1": 0.8441652930366819,
+      "f1_neg": 0.7330097087378641,
+      "precision_neg": 0.7475247524752475,
+      "recall_neg": 0.719047619047619,
+      "f1_pos": 0.9553208773354996,
+      "roc_auc": 0.9457367951255482,
+      "pr_auc_neg": 0.8346424572469964,
+      "tn": 151,
+      "fp": 59,
+      "fn": 51,
+      "tp": 1176,
+      "pred_pos_ratio": 0.8594293667362561,
+      "fold": 1
+    }
+  ],
+  "test_pred_pos_ratio": 0.8573743922204214,
+  "resources": {
+    "feature_dim": 300,
+    "n_params": 4575184,
+    "n_params_total_fold_mean": 4575184.0,
+    "n_params_excluding_embeddings": 1144834,
+    "embeddings_trained": true,
+    "tokenize_train_s": 0.057538042005035095,
+    "tokenize_test_s": 0.013784666996798478,
+    "glove_load_s": 34.73931391698716,
+    "vocab_build_s_total": 0.13336337500368245,
+    "train_steps_s_total": 117.43520450101641,
+    "eval_s_total": 4.517006041001878,
+    "train_s_total": 122.14311195902701,
+    "infer_test_s_per_model": 0.3823002709978027,
+    "infer_test_s": 0.4017353129966068,
+    "wall_s": 159.0481854170066,
+    "peak_rss_mb": 1346.093056,
+    "device_mem_mb_max": 4779.180032,
+    "machine": "Darwin arm64 arm",
+    "device": "mps",
+    "precision": "fp32",
+    "pretrained_vectors": {
+      "name": "glove-wiki-gigaword-300",
+      "disk_mb_approx": 376,
+      "used_for": "vocabulary membership + initialisation"
+    }
+  },
+  "cv_mean_std": {
+    "accuracy": {
+      "mean": 0.9210160055671538,
+      "std": 0.0017397355601947995
+    },
+    "macro_f1": {
+      "mean": 0.8454988037418886,
+      "std": 0.0047250055896507215
+    },
+    "f1_neg": {
+      "mean": 0.7374836929788917,
+      "std": 0.00851173036206937
+    },
+    "precision_neg": {
+      "mean": 0.7151952205660491,
+      "std": 0.002866453442761485
+    },
+    "recall_neg": {
+      "mean": 0.7613009797220324,
+      "std": 0.014889496468443841
+    },
+    "roc_auc": {
+      "mean": 0.9450994100107859,
+      "std": 0.0015532852971659739
+    }
+  },
+  "cv_mean_std_last": {
+    "accuracy": {
+      "mean": 0.91892832289492,
+      "std": 0.004523312456506612
+    },
+    "macro_f1": {
+      "mean": 0.8351325199432857,
+      "std": 0.009032773093396063
+    },
+    "f1_neg": {
+      "mean": 0.7175944427466561,
+      "std": 0.015415265991208071
+    },
+    "precision_neg": {
+      "mean": 0.7291545331003688,
+      "std": 0.01837021937487865
+    },
+    "recall_neg": {
+      "mean": 0.7064137616769195,
+      "std": 0.012633857370699497
+    },
+    "roc_auc": {
+      "mean": 0.9404538829671348,
+      "std": 0.0052829121584133665
+    }
+  },
+  "oof_at_0.5": {
+    "threshold": 0.5,
+    "accuracy": 0.9210160055671538,
+    "macro_f1": 0.8455422197336755,
+    "f1_neg": 0.7375722543352601,
+    "precision_neg": 0.7152466367713004,
+    "recall_neg": 0.7613365155131265,
+    "f1_pos": 0.9535121851320909,
+    "roc_auc": 0.9403462807868604,
+    "pr_auc_neg": 0.8001944825085677,
+    "tn": 319,
+    "fp": 100,
+    "fn": 127,
+    "tp": 2328,
+    "pred_pos_ratio": 0.8448155880306193
+  },
+  "oof_at_0.5_last": {
+    "threshold": 0.5,
+    "accuracy": 0.91892832289492,
+    "macro_f1": 0.8351234465311248,
+    "f1_neg": 0.7175757575757575,
+    "precision_neg": 0.729064039408867,
+    "recall_neg": 0.7064439140811456,
+    "f1_pos": 0.952671135486492,
+    "roc_auc": 0.9300759737324344,
+    "pr_auc_neg": 0.7828337314284247,
+    "tn": 296,
+    "fp": 123,
+    "fn": 110,
+    "tp": 2345,
+    "pred_pos_ratio": 0.8587334725121781
+  },
+  "threshold": 0.44,
+  "oof_at_threshold": {
+    "threshold": 0.44,
+    "accuracy": 0.9241475295755045,
+    "macro_f1": 0.848922570321565,
+    "f1_neg": 0.7423167848699763,
+    "precision_neg": 0.7353629976580797,
+    "recall_neg": 0.7494033412887828,
+    "f1_pos": 0.9555283557731539,
+    "roc_auc": 0.9403462807868604,
+    "pr_auc_neg": 0.8001944825085677,
+    "tn": 314,
+    "fp": 105,
+    "fn": 113,
+    "tp": 2342,
+    "pred_pos_ratio": 0.8514265831593598,
+    "note": "in-sample: threshold selected on these same OOF probabilities; see oof_at_threshold_nested"
+  },
+  "oof_at_threshold_nested": {
+    "fold_thresholds": [
+      0.37,
+      0.58
+    ],
+    "note": "threshold chosen on the other folds' OOF, scored on the held-out fold, pooled (nested w.r.t. the threshold only; checkpoint selection bias remains, see *_last)",
+    "accuracy": 0.9203201113430759,
+    "macro_f1": 0.8435855918674946,
+    "f1_neg": 0.7340301974448316,
+    "precision_neg": 0.7149321266968326,
+    "recall_neg": 0.7541766109785203,
+    "f1_pos": 0.9531409862901575,
+    "roc_auc": 0.9403462807868604,
+    "pr_auc_neg": 0.8001944825085677,
+    "tn": 316,
+    "fp": 103,
+    "fn": 126,
+    "tp": 2329,
+    "pred_pos_ratio": 0.8462073764787752
+  },
+  "artifacts": {
+    "oof": "results/oof/glove_bilstm_lr5e-4_seed42_f0-1.npy",
+    "oof_last": "results/oof/glove_bilstm_lr5e-4_seed42_f0-1_last.npy",
+    "test_probs": "results/test_probs/glove_bilstm_lr5e-4_seed42_f0-1.npy",
+    "thresholds": "results/summary/glove_bilstm_lr5e-4_seed42_f0-1_thresholds.csv",
+    "curves": "results/summary/glove_bilstm_lr5e-4_seed42_f0-1_curves.csv"
+  }
+}
