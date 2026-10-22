@@ -1,0 +1,230 @@
+{
+  "run_id": "tfidf_lr_notebook_seed42",
+  "name": "tfidf_lr_notebook",
+  "model": "tfidf_lr",
+  "feature_format": "tfidf",
+  "config": {
+    "name": "tfidf_lr_notebook",
+    "seed": 42,
+    "C": 1.0,
+    "class_weight": "none",
+    "ngram_max": 1,
+    "min_df": 1,
+    "max_df": 0.95,
+    "no_sublinear_tf": false,
+    "no_negation": true,
+    "acc_slack": 0.003
+  },
+  "protocol": {
+    "dedup": true,
+    "n_train": 7185,
+    "n_splits": 5,
+    "fold_seed": 42,
+    "std_ddof": 0,
+    "threshold_rule": "max macro-F1 s.t. acc >= best-acc - 0.003; final threshold chosen on all OOF"
+  },
+  "folds": [
+    {
+      "threshold": 0.5,
+      "accuracy": 0.8810020876826722,
+      "macro_f1": 0.6469789632924322,
+      "f1_neg": 0.3595505617977528,
+      "precision_neg": 0.8275862068965517,
+      "recall_neg": 0.22966507177033493,
+      "f1_pos": 0.9344073647871116,
+      "roc_auc": 0.9375418855103408,
+      "pr_auc_neg": 0.7244783505218471,
+      "tn": 48,
+      "fp": 161,
+      "fn": 10,
+      "tp": 1218,
+      "pred_pos_ratio": 0.9596381350034795,
+      "fold": 0,
+      "n_train": 5748,
+      "n_val": 1437,
+      "feature_dim": 13184
+    },
+    {
+      "threshold": 0.5,
+      "accuracy": 0.8879610299234516,
+      "macro_f1": 0.6676234683630502,
+      "f1_neg": 0.3970037453183521,
+      "precision_neg": 0.9298245614035088,
+      "recall_neg": 0.2523809523809524,
+      "f1_pos": 0.9382431914077484,
+      "roc_auc": 0.9358093685722049,
+      "pr_auc_neg": 0.7831760253756278,
+      "tn": 53,
+      "fp": 157,
+      "fn": 4,
+      "tp": 1223,
+      "pred_pos_ratio": 0.9603340292275574,
+      "fold": 1,
+      "n_train": 5748,
+      "n_val": 1437,
+      "feature_dim": 12941
+    },
+    {
+      "threshold": 0.5,
+      "accuracy": 0.8886569241475296,
+      "macro_f1": 0.6751367726183479,
+      "f1_neg": 0.4117647058823529,
+      "precision_neg": 0.9032258064516129,
+      "recall_neg": 0.26666666666666666,
+      "f1_pos": 0.9385088393543428,
+      "roc_auc": 0.9400162999185004,
+      "pr_auc_neg": 0.7538993908248549,
+      "tn": 56,
+      "fp": 154,
+      "fn": 6,
+      "tp": 1221,
+      "pred_pos_ratio": 0.9568545581071677,
+      "fold": 2,
+      "n_train": 5748,
+      "n_val": 1437,
+      "feature_dim": 12864
+    },
+    {
+      "threshold": 0.5,
+      "accuracy": 0.883785664578984,
+      "macro_f1": 0.6552367653206794,
+      "f1_neg": 0.37453183520599254,
+      "precision_neg": 0.8771929824561403,
+      "recall_neg": 0.23809523809523808,
+      "f1_pos": 0.9359416954353663,
+      "roc_auc": 0.9350913959715917,
+      "pr_auc_neg": 0.7560942806138553,
+      "tn": 50,
+      "fp": 160,
+      "fn": 7,
+      "tp": 1220,
+      "pred_pos_ratio": 0.9603340292275574,
+      "fold": 3,
+      "n_train": 5748,
+      "n_val": 1437,
+      "feature_dim": 12880
+    },
+    {
+      "threshold": 0.5,
+      "accuracy": 0.8879610299234516,
+      "macro_f1": 0.6698413830994157,
+      "f1_neg": 0.40148698884758366,
+      "precision_neg": 0.9152542372881356,
+      "recall_neg": 0.2571428571428571,
+      "f1_pos": 0.9381957773512476,
+      "roc_auc": 0.9451857026429153,
+      "pr_auc_neg": 0.7795243935371468,
+      "tn": 54,
+      "fp": 156,
+      "fn": 5,
+      "tp": 1222,
+      "pred_pos_ratio": 0.9589422407794015,
+      "fold": 4,
+      "n_train": 5748,
+      "n_val": 1437,
+      "feature_dim": 12931
+    }
+  ],
+  "cv_mean_std": {
+    "accuracy": {
+      "mean": 0.8858733472512178,
+      "std": 0.0029850536659049853
+    },
+    "macro_f1": {
+      "mean": 0.662963470538785,
+      "std": 0.010319079318140094
+    },
+    "f1_neg": {
+      "mean": 0.3888675674104068,
+      "std": 0.019051121617854196
+    },
+    "precision_neg": {
+      "mean": 0.8906167588991899,
+      "std": 0.03593408815738324
+    },
+    "recall_neg": {
+      "mean": 0.24879015721120984,
+      "std": 0.013284435888875127
+    },
+    "roc_auc": {
+      "mean": 0.9387289305231107,
+      "std": 0.0036472400970675336
+    }
+  },
+  "oof_at_0.5": {
+    "threshold": 0.5,
+    "accuracy": 0.8858733472512178,
+    "macro_f1": 0.6630151634882933,
+    "f1_neg": 0.3889716840536513,
+    "precision_neg": 0.8907849829351536,
+    "recall_neg": 0.24880838894184937,
+    "f1_pos": 0.9370586429229352,
+    "roc_auc": 0.938744355771872,
+    "pr_auc_neg": 0.7594308214987257,
+    "tn": 261,
+    "fp": 788,
+    "fn": 32,
+    "tp": 6104,
+    "pred_pos_ratio": 0.9592205984690327
+  },
+  "threshold": 0.7,
+  "oof_at_threshold": {
+    "threshold": 0.7,
+    "accuracy": 0.9157967988865693,
+    "macro_f1": 0.8221274779978697,
+    "f1_neg": 0.6930492135971588,
+    "precision_neg": 0.7407809110629068,
+    "recall_neg": 0.6510962821734986,
+    "f1_pos": 0.9512057423985806,
+    "roc_auc": 0.938744355771872,
+    "pr_auc_neg": 0.7594308214987257,
+    "tn": 683,
+    "fp": 366,
+    "fn": 239,
+    "tp": 5897,
+    "pred_pos_ratio": 0.8716771050800278,
+    "note": "in-sample: threshold selected on these same OOF probabilities; see oof_at_threshold_nested"
+  },
+  "oof_at_threshold_nested": {
+    "fold_thresholds": [
+      0.7,
+      0.73,
+      0.71,
+      0.7,
+      0.7
+    ],
+    "note": "threshold chosen on the other folds' OOF, scored on the held-out fold, pooled",
+    "accuracy": 0.9137091162143354,
+    "macro_f1": 0.819636849260182,
+    "f1_neg": 0.6893787575150301,
+    "precision_neg": 0.7265047518479408,
+    "recall_neg": 0.655862726406101,
+    "f1_pos": 0.9498949410053338,
+    "roc_auc": 0.938744355771872,
+    "pr_auc_neg": 0.7594308214987257,
+    "tn": 688,
+    "fp": 361,
+    "fn": 259,
+    "tp": 5877,
+    "pred_pos_ratio": 0.8681976339596381
+  },
+  "test_pred_pos_ratio": 0.8725013506212858,
+  "resources": {
+    "feature_dim_mean": 12960.0,
+    "n_params": 12961,
+    "preprocess_s": 0.0015185000011115335,
+    "vectorize_s_total": 0.40413370800524717,
+    "train_s_total": 0.08579254100186517,
+    "infer_test_s_total": 0.08546716700220713,
+    "infer_test_s_per_model": 0.017093433400441428,
+    "wall_s": 3.1287636250053765,
+    "peak_rss_mb": 235.43808,
+    "machine": "Darwin arm64 arm",
+    "device": "cpu"
+  },
+  "artifacts": {
+    "oof": "results/oof/tfidf_lr_notebook_seed42.npy",
+    "test_probs": "results/test_probs/tfidf_lr_notebook_seed42.npy",
+    "thresholds": "results/summary/tfidf_lr_notebook_seed42_thresholds.csv"
+  }
+}

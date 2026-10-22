@@ -1,0 +1,11 @@
+# conda env for the EE6483 project (verified 2026-10-22 on Apple M5, macOS; torch uses the MPS backend)
+#   conda env create -f environment.yml
+#   conda activate ee6483
+name: ee6483
+channels:
+  - defaults
+dependencies:
+  - python=3.13
+  - pip
+  - pip:
+      - -r requirements.txt
