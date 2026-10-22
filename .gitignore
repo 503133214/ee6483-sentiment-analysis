@@ -1,0 +1,28 @@
+# Local environments and Python caches
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+.pytest_cache/
+
+# Local settings and credentials
+.env
+.env.*
+!.env.example
+.codex/
+.agents/
+.DS_Store
+
+# Downloaded models, training artifacts and experiment logs
+.cache/
+models/
+checkpoints/
+outputs/
+wandb/
+runs/
+*.safetensors
+*.pt
+*.pth
+*.ckpt
+*.log
