@@ -176,9 +176,10 @@ def main(argv=None):
     (RESULTS_DIR / "summary" / f"{run_id}.json").write_text(json.dumps(summary, indent=2))
 
     row = {
-        "run_id": run_id, "model": "tfidf_lr", "feature_format": "tfidf", "seed": args.seed, "n_splits": N_SPLITS,
+        "run_id": run_id, "model": "tfidf_lr", "feature_format": "tfidf", "seed": args.seed, "n_splits": N_SPLITS, "partial": False,
         "feature_dim": summary["resources"]["feature_dim_mean"], "n_params": summary["resources"]["n_params"],
-        "train_s_total": round(t_vec + t_fit, 3), "infer_test_s": round(t_infer / N_SPLITS, 4), "peak_rss_mb": round(peak_rss_mb(), 1), "device": "cpu",
+        "train_s_total": round(t_vec + t_fit, 3), "infer_test_s": round(t_infer / N_SPLITS, 4), "peak_rss_mb": round(peak_rss_mb(), 1), "device": "cpu", "device_mem_mb": None,
+        "selection": "none", "acc_mean_last": None, "macro_f1_mean_last": None,
         "acc_mean": summary_stats["accuracy"]["mean"], "acc_std": summary_stats["accuracy"]["std"],
         "macro_f1_mean": summary_stats["macro_f1"]["mean"], "macro_f1_std": summary_stats["macro_f1"]["std"],
         "f1_neg_mean": summary_stats["f1_neg"]["mean"], "roc_auc_mean": summary_stats["roc_auc"]["mean"],

@@ -1,0 +1,112 @@
+{
+  "stages": {
+    "sweep": {
+      "folds": "0,1",
+      "runs": [
+        {
+          "lr": 2e-05,
+          "run_id": "distilbert_len128_lr2e-05_seed42_f0-1",
+          "ok": true,
+          "minutes": 6.48414938403342,
+          "acc_mean": 0.941892832289492,
+          "acc_std": 0.0010438413361169,
+          "macro_f1_mean": 0.8836894839909164,
+          "macro_f1_std": 0.0024330738591411,
+          "f1_neg_mean": 0.8014116209888134,
+          "roc_auc_mean": 0.97047491443265,
+          "acc_mean_last": 0.939805149617258,
+          "macro_f1_mean_last": 0.8783368783509446,
+          "oof_macro_f1_at_thr_nested": 0.8848893533549551,
+          "test_pos_ratio": 0.8649378714208535,
+          "train_s_total": 377.7
+        },
+        {
+          "lr": 3e-05,
+          "run_id": "distilbert_len128_lr3e-05_seed42_f0-1",
+          "ok": true,
+          "minutes": 6.482631943050122,
+          "acc_mean": 0.9446764091858038,
+          "acc_std": 0.000347947112039,
+          "macro_f1_mean": 0.8872308334622165,
+          "macro_f1_std": 0.0012311527992807,
+          "f1_neg_mean": 0.8067470164244358,
+          "roc_auc_mean": 0.971572535984037,
+          "acc_mean_last": 0.9446764091858038,
+          "macro_f1_mean_last": 0.8865605802866936,
+          "oof_macro_f1_at_thr_nested": 0.8872600551405962,
+          "test_pos_ratio": 0.8611561318206374,
+          "train_s_total": 378.0
+        },
+        {
+          "lr": 5e-05,
+          "run_id": "distilbert_len128_lr5e-05_seed42_f0-1",
+          "ok": true,
+          "minutes": 6.486577797216644,
+          "acc_mean": 0.9464161447459988,
+          "acc_std": 0.0013917884481558,
+          "macro_f1_mean": 0.8930712384428514,
+          "macro_f1_std": 0.0025677241730932,
+          "f1_neg_mean": 0.817545751138514,
+          "roc_auc_mean": 0.9698845734650732,
+          "acc_mean_last": 0.9460681976339596,
+          "macro_f1_mean_last": 0.8909221103862112,
+          "oof_macro_f1_at_thr_nested": 0.8949533386084858,
+          "test_pos_ratio": 0.8746623446785521,
+          "train_s_total": 378.3
+        }
+      ],
+      "best_lr": 5e-05,
+      "selection": "max mean macro-F1 @0.5 (best checkpoint) over folds 0,1; tie: accuracy"
+    },
+    "roberta": {
+      "run_id": "roberta_base_len256_seed42",
+      "ok": true,
+      "minutes": 35.18170972638327,
+      "lr": 3e-05,
+      "lr_rule": "min(best distilbert lr, 3e-05)",
+      "acc_mean": 0.9617258176757132,
+      "acc_std": 0.0032342240886909,
+      "macro_f1_mean": 0.92274772028489,
+      "macro_f1_std": 0.0059862454758661,
+      "f1_neg_mean": 0.8678771426116894,
+      "roc_auc_mean": 0.9803958296386884,
+      "acc_mean_last": 0.9611691022964508,
+      "macro_f1_mean_last": 0.9210217533483054,
+      "oof_macro_f1_at_thr_nested": 0.922425204982162,
+      "test_pos_ratio": 0.855213398163155,
+      "train_s_total": 3399.9
+    },
+    "ablation": {
+      "run_id": "distilbert_len128_lr5e-05_cwnone_seed42_f0-1",
+      "ok": true,
+      "minutes": 6.46619649443334,
+      "class_weight": "none",
+      "acc_mean": 0.9478079331941544,
+      "acc_std": 0.0013917884481559,
+      "macro_f1_mean": 0.8922286694902958,
+      "macro_f1_std": 0.002429263274189,
+      "f1_neg_mean": 0.8148346858024278,
+      "roc_auc_mean": 0.9692806928799492,
+      "acc_mean_last": 0.9432846207376478,
+      "macro_f1_mean_last": 0.8824593231565578,
+      "oof_macro_f1_at_thr_nested": 0.8838005390835579,
+      "test_pos_ratio": 0.8681793625067531,
+      "train_s_total": 376.9,
+      "vs_sqrt": {
+        "acc_mean": 0.9464161447459988,
+        "acc_std": 0.0013917884481558,
+        "macro_f1_mean": 0.8930712384428514,
+        "macro_f1_std": 0.0025677241730932,
+        "f1_neg_mean": 0.817545751138514,
+        "roc_auc_mean": 0.9698845734650732,
+        "acc_mean_last": 0.9460681976339596,
+        "macro_f1_mean_last": 0.8909221103862112,
+        "oof_macro_f1_at_thr_nested": 0.8949533386084858,
+        "test_pos_ratio": 0.8746623446785521,
+        "train_s_total": 378.3
+      }
+    }
+  },
+  "last_started": "2026-10-23 00:24:31",
+  "last_finished": "2026-10-23 00:59:42"
+}

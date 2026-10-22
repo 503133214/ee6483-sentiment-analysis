@@ -77,6 +77,8 @@ def nested_threshold_metrics(y_true, prob, fold, acc_slack: float = 0.003) -> di
     fold = np.asarray(fold)
     pred = np.zeros(len(y_true), dtype=int)
     fold_thresholds = []
+    if len(np.unique(fold)) < 2:
+        return {"fold_thresholds": [], "note": "nested estimate needs at least 2 folds", "accuracy": float("nan"), "macro_f1": float("nan"), "f1_neg": float("nan")}
     for k in sorted(np.unique(fold)):
         va = fold == k
         t_k, _ = choose_threshold(y_true[~va], prob[~va], acc_slack=acc_slack)

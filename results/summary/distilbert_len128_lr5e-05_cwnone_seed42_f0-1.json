@@ -1,0 +1,307 @@
+{
+  "run_id": "distilbert_len128_lr5e-05_cwnone_seed42_f0-1",
+  "name": "distilbert_len128_lr5e-05_cwnone",
+  "model": "distilbert-base-uncased",
+  "feature_format": "plm_finetune",
+  "config": {
+    "model": "distilbert-base-uncased",
+    "name": "distilbert_len128_lr5e-05_cwnone",
+    "seed": 42,
+    "lr": 5e-05,
+    "batch_size": 32,
+    "epochs": 3,
+    "max_len": 128,
+    "truncation": "head_tail",
+    "head_frac": 0.75,
+    "warmup_ratio": 0.1,
+    "weight_decay": 0.01,
+    "max_grad_norm": 1.0,
+    "class_weight": "none",
+    "label_smoothing": 0.0,
+    "eval_every": 0.5,
+    "precision": "fp16",
+    "device": "auto",
+    "folds": "0,1",
+    "limit": null,
+    "acc_slack": 0.003,
+    "no_save": false,
+    "allow_partial": true,
+    "resume": false,
+    "partial": true
+  },
+  "protocol": {
+    "dedup": true,
+    "n_train": 7185,
+    "n_splits": 5,
+    "folds_run": [
+      0,
+      1
+    ],
+    "partial": true,
+    "fold_seed": 42,
+    "std_ddof": 0,
+    "threshold_rule": "max macro-F1 s.t. acc >= best-acc - 0.003; final threshold chosen on all OOF",
+    "model_selection": "checkpoint = best val macro-F1 @0.5 on the same held-out fold (evaluated every 0.5 epoch, max over 6 evals): slightly optimistic; *_last = final checkpoint, no selection"
+  },
+  "tokenization": {
+    "train": {
+      "subword_len_mean": 69.3910925539318,
+      "subword_len_median": 51.0,
+      "subword_len_p95": 177.0,
+      "subword_len_max": 1297,
+      "n_truncated": 799,
+      "frac_truncated": 0.11120389700765483
+    },
+    "test": {
+      "subword_len_mean": 68.35764451647758,
+      "subword_len_median": 50.0,
+      "subword_len_p95": 188.5,
+      "subword_len_max": 939,
+      "n_truncated": 223,
+      "frac_truncated": 0.12047541869259859
+    },
+    "max_len": 128,
+    "truncation": "head_tail"
+  },
+  "folds": [
+    {
+      "threshold": 0.5,
+      "accuracy": 0.9464161447459986,
+      "macro_f1": 0.8897994062161068,
+      "f1_neg": 0.8108108108108109,
+      "precision_neg": 0.8333333333333334,
+      "recall_neg": 0.7894736842105263,
+      "f1_pos": 0.9687880016214026,
+      "roc_auc": 0.9716230537848917,
+      "pr_auc_neg": 0.8877647276377084,
+      "tn": 165,
+      "fp": 44,
+      "fn": 33,
+      "tp": 1195,
+      "pred_pos_ratio": 0.8622129436325678,
+      "fold": 0,
+      "n_train": 5748,
+      "n_val": 1437,
+      "best_step": 540,
+      "best_epoch": 3.0,
+      "total_steps": 540,
+      "train_s": 181.7358405370469,
+      "eval_s": 6.573271960005513,
+      "infer_test_s": 1.3263518330059014,
+      "precision": "fp16",
+      "device_mem_mb": 3246.194688
+    },
+    {
+      "threshold": 0.5,
+      "accuracy": 0.9491997216423104,
+      "macro_f1": 0.8946579327644848,
+      "f1_neg": 0.8188585607940446,
+      "precision_neg": 0.8549222797927462,
+      "recall_neg": 0.7857142857142857,
+      "f1_pos": 0.9704573047349251,
+      "roc_auc": 0.9669383319750069,
+      "pr_auc_neg": 0.8826014748199553,
+      "tn": 165,
+      "fp": 45,
+      "fn": 28,
+      "tp": 1199,
+      "pred_pos_ratio": 0.8656924147529576,
+      "fold": 1,
+      "n_train": 5748,
+      "n_val": 1437,
+      "best_step": 270,
+      "best_epoch": 1.5,
+      "total_steps": 540,
+      "train_s": 181.34507302519341,
+      "eval_s": 6.678297000020393,
+      "infer_test_s": 1.3270303750032326,
+      "precision": "fp16",
+      "device_mem_mb": 4320.067584
+    }
+  ],
+  "folds_last": [
+    {
+      "threshold": 0.5,
+      "accuracy": 0.9464161447459986,
+      "macro_f1": 0.8897994062161068,
+      "f1_neg": 0.8108108108108109,
+      "precision_neg": 0.8333333333333334,
+      "recall_neg": 0.7894736842105263,
+      "f1_pos": 0.9687880016214026,
+      "roc_auc": 0.9716230537848917,
+      "pr_auc_neg": 0.8877647276377084,
+      "tn": 165,
+      "fp": 44,
+      "fn": 33,
+      "tp": 1195,
+      "pred_pos_ratio": 0.8622129436325678,
+      "fold": 0
+    },
+    {
+      "threshold": 0.5,
+      "accuracy": 0.9401530967292971,
+      "macro_f1": 0.8751192400970089,
+      "f1_neg": 0.785,
+      "precision_neg": 0.8263157894736842,
+      "recall_neg": 0.7476190476190476,
+      "f1_pos": 0.9652384801940178,
+      "roc_auc": 0.9670586408972718,
+      "pr_auc_neg": 0.8866596588964749,
+      "tn": 157,
+      "fp": 53,
+      "fn": 33,
+      "tp": 1194,
+      "pred_pos_ratio": 0.8677800974251914,
+      "fold": 1
+    }
+  ],
+  "cv_mean_std": {
+    "accuracy": {
+      "mean": 0.9478079331941545,
+      "std": 0.0013917884481559062
+    },
+    "macro_f1": {
+      "mean": 0.8922286694902958,
+      "std": 0.0024292632741890197
+    },
+    "f1_neg": {
+      "mean": 0.8148346858024278,
+      "std": 0.0040238749916168826
+    },
+    "precision_neg": {
+      "mean": 0.8441278065630398,
+      "std": 0.010794473229706392
+    },
+    "recall_neg": {
+      "mean": 0.7875939849624061,
+      "std": 0.0018796992481203145
+    },
+    "roc_auc": {
+      "mean": 0.9692806928799493,
+      "std": 0.0023423609049423866
+    }
+  },
+  "cv_mean_std_last": {
+    "accuracy": {
+      "mean": 0.9432846207376478,
+      "std": 0.0031315240083507057
+    },
+    "macro_f1": {
+      "mean": 0.8824593231565578,
+      "std": 0.007340083059548919
+    },
+    "f1_neg": {
+      "mean": 0.7979054054054054,
+      "std": 0.012905405405405412
+    },
+    "precision_neg": {
+      "mean": 0.8298245614035088,
+      "std": 0.0035087719298245723
+    },
+    "recall_neg": {
+      "mean": 0.768546365914787,
+      "std": 0.02092731829573935
+    },
+    "roc_auc": {
+      "mean": 0.9693408473410817,
+      "std": 0.002282206443809942
+    }
+  },
+  "oof_at_0.5": {
+    "threshold": 0.5,
+    "accuracy": 0.9478079331941545,
+    "macro_f1": 0.8922190720489627,
+    "f1_neg": 0.8148148148148148,
+    "precision_neg": 0.8439897698209718,
+    "recall_neg": 0.7875894988066826,
+    "f1_pos": 0.9696233292831106,
+    "roc_auc": 0.965063262836061,
+    "pr_auc_neg": 0.8709259369409668,
+    "tn": 330,
+    "fp": 89,
+    "fn": 61,
+    "tp": 2394,
+    "pred_pos_ratio": 0.8639526791927628
+  },
+  "oof_at_0.5_last": {
+    "threshold": 0.5,
+    "accuracy": 0.9432846207376478,
+    "macro_f1": 0.882514037388395,
+    "f1_neg": 0.7980173482032218,
+    "precision_neg": 0.8298969072164949,
+    "recall_neg": 0.7684964200477327,
+    "f1_pos": 0.9670107265735681,
+    "roc_auc": 0.9695623854682617,
+    "pr_auc_neg": 0.88694203544444,
+    "tn": 322,
+    "fp": 97,
+    "fn": 66,
+    "tp": 2389,
+    "pred_pos_ratio": 0.8649965205288797
+  },
+  "threshold": 0.51,
+  "oof_at_threshold": {
+    "threshold": 0.51,
+    "accuracy": 0.9481558803061935,
+    "macro_f1": 0.8930479653997958,
+    "f1_neg": 0.8162762022194822,
+    "precision_neg": 0.8443877551020408,
+    "recall_neg": 0.7899761336515513,
+    "f1_pos": 0.9698197285801093,
+    "roc_auc": 0.965063262836061,
+    "pr_auc_neg": 0.8709259369409668,
+    "tn": 331,
+    "fp": 88,
+    "fn": 61,
+    "tp": 2394,
+    "pred_pos_ratio": 0.8636047320807237,
+    "note": "in-sample: threshold selected on these same OOF probabilities; see oof_at_threshold_nested"
+  },
+  "oof_at_threshold_nested": {
+    "fold_thresholds": [
+      0.5,
+      0.88
+    ],
+    "note": "threshold chosen on the other folds' OOF, scored on the held-out fold, pooled (nested w.r.t. the threshold only; checkpoint selection bias remains, see *_last)",
+    "accuracy": 0.941544885177453,
+    "macro_f1": 0.8838005390835579,
+    "f1_neg": 0.8018867924528302,
+    "precision_neg": 0.7925407925407926,
+    "recall_neg": 0.8114558472553699,
+    "f1_pos": 0.9657142857142857,
+    "roc_auc": 0.965063262836061,
+    "pr_auc_neg": 0.8709259369409668,
+    "tn": 340,
+    "fp": 79,
+    "fn": 89,
+    "tp": 2366,
+    "pred_pos_ratio": 0.8507306889352818
+  },
+  "test_pred_pos_ratio": 0.8681793625067531,
+  "resources": {
+    "feature_dim": 768,
+    "n_params": 66955010,
+    "tokenize_train_s": 0.5463959579938091,
+    "tokenize_test_s": 0.13612650000141002,
+    "train_steps_s_total": 363.0809135622403,
+    "eval_s_total": 13.251568960025907,
+    "train_s_total": 376.87887848026,
+    "train_s_per_epoch": 60.51348559370672,
+    "infer_test_s_per_model": 1.326691104004567,
+    "infer_test_s": 1.462817604005977,
+    "wall_s": 384.5905372080015,
+    "peak_rss_mb": 804.028416,
+    "device_mem_mb_max": 4320.067584,
+    "machine": "Darwin arm64 arm",
+    "device": "mps",
+    "precision": "fp16",
+    "fp32_fallback_folds": []
+  },
+  "artifacts": {
+    "oof": "results/oof/distilbert_len128_lr5e-05_cwnone_seed42_f0-1.npy",
+    "oof_last": "results/oof/distilbert_len128_lr5e-05_cwnone_seed42_f0-1_last.npy",
+    "test_probs": "results/test_probs/distilbert_len128_lr5e-05_cwnone_seed42_f0-1.npy",
+    "thresholds": "results/summary/distilbert_len128_lr5e-05_cwnone_seed42_f0-1_thresholds.csv",
+    "curves": "results/summary/distilbert_len128_lr5e-05_cwnone_seed42_f0-1_curves.csv"
+  }
+}
