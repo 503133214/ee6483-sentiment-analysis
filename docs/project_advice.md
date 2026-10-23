@@ -1,323 +1,223 @@
-# EE6483 Mini Project (Option 1) 项目建议
+# EE6483 Mini Project (Option 1)：报告组织与写作指南
 
-> 生成日期 2026-10-22。截止 2026-11-13 (周五 23:59), 还有 22 天。
-> 文中所有标 **[实测]** 的数字都是今天在这台 Apple M5 / 16 GB 上用 `data/raw/train.json` / `test.json` 真实跑出来的; 标 **[估算]** 的是推断。
+> 更新于 2026-10-23。本文依据当前 `results/runs.csv`、`results/summary/` 和实现代码组织报告；待开展的工作另列为计划。课程要求见 [EE6483-Project1.pdf](assignment/EE6483-Project1.pdf)，运行命令与环境配置见 [README](../README.md)。
 
----
+## 1. 报告主线：不平衡评论分类中的表示能力与计算成本
 
-## 0. 一页总览: 最重要的 10 件事 (按优先级)
+本项目最有说服力的结果是：**在共享的数据划分下，TF-IDF 提供低成本基线，预训练词向量改善 BiLSTM，而 RoBERTa 在总体准确性和负类识别上取得进一步收益。** 报告围绕这三个层次展开，回答“增加的计算成本换来了什么”，并据此说明不同资源预算下的模型选择。
 
-1. **分值结构决定策略**: 写作占 60% (a 20 + f 10 + g 10 + h 10 + i 10), 建模占 40% (b 5 + c 15 + d 5 + e 15)。文献综述和 h/i 两道开放题不依赖代码, **第一天就动笔**, 不要等模型。
-2. **D1-D2 先交保底**: TF-IDF 1-2gram + 否定标记 + LogisticRegression(C=4, class_weight=balanced) **[实测]** 5 折 accuracy 0.929 / macro-F1 0.860, 几秒跑完; 用它先生成一版 `submission.csv`, 之后随时可交。
-3. **环境一次定死**: 现有 conda 环境 `torch` (Python 3.10) 的 scipy 在这台 macOS 27 上 dlopen 失败, sklearn/transformers 都装不上 **[实测]**。用 base 的 Python 3.13 新建 venv 到 `~/venvs/ee6483` (不要建在 OneDrive 目录里)。torch 2.14 + transformers 5.x + sklearn 1.7 在 MPS 上实测可用。
-4. **评估协议统一**: 文本去重 (7401 → 7185) → `StratifiedKFold(5, shuffle, random_state=42)` → fold id 存成文件, **所有模型共用同一组折**; 指标固定为 accuracy / macro-F1 / F1(neg) / ROC-AUC + 混淆矩阵; 每次实验追加一行 `results/runs.csv`。否则 g) 的对照表和 d) 的超参曲线都不可比。
-5. **类别不平衡必须处理**: 正面 85.4%, 全预测 1 就是 85.4% accuracy; 不处理时 TF-IDF+LR 的负类 F1 只有 0.42-0.56 **[实测]**。最终只保留一个旋钮 (OOF 阈值或加权 CE, 不要叠加), 以 macro-F1 选模型。
-6. **主模型 roberta-base**: MPS fp16 autocast 下 3 epoch 一折 5.9 分钟, 5 折 23 分钟, 3 seed × 5 折约 70 分钟 **[实测]**。本机完全够用。deberta-v3-base 在 MPS 上 loss 变 NaN **[实测]**, 只能放 Colab 当可选对照。
-7. **RNN 一行不能少**: PDF 明确鼓励 RNN / BERT; GloVe + BiLSTM (mask 池化, 不要用 pack_padded_sequence, MPS 上慢 12 倍 **[实测]**) 和 TextCNN 各跑一组, 分钟级。README 里的 Qwen 路线放在所有必做项之后, 只作为 g) 表里 "解码器 LLM" 的可选一行。
-8. **合规红线**: test 文本不得参与任何训练, 包括 TF-IDF fit、TAPT 继续预训练、self-training、阈值选择; 87 条 train/test 重叠文本不查表覆盖, 报告里如实说明; h) 若用外部酒店数据只能当评估集并声明不参与 submission。
-9. **f) 要有无偏的 test 子集**: 从 test 随机抽 200-300 条, 三人独立标注、多数投票、报告 Cohen's kappa, 得到诚实的 test 准确率点估计; 再从 OOF 错误里挑 "做对的难例" + "做错的" 各 1 条做词级归因。
-10. **11/12 提交, 留一天缓冲**; 最晚降级点 11/5: 若 roberta 仍不稳定, 用 TF-IDF 结果写 c/d/e 保证报告完整。
+报告的价值来自统一评估、针对不平衡类别的分析，以及有实测依据的资源权衡。各章节都应服务于这条论证。
 
----
+### 1.1 主结果与证据
 
-## 1. 数据实测结论 (直接可写进报告 b)
+当前核心结果来自去重后的 **7,185 条训练评论、共享 5 折、训练 seed=42、阈值 0.5**。完整主表、两折探索、资源统计和各项评分口径统一维护在 [实验结果与评估口径](experiment_results.md)，正文重点解释三组证据：
 
-| 项目 | 数值 |
+1. **TF-IDF 的计算成本低。** 含否定标记的 LR 在 CPU 上完成 5 折向量化与拟合的记录耗时为 1.144 秒，macro-F1 为 0.854。与同配置的无否定标记版本相比，macro-F1 增加 0.86 个百分点，说明针对文本现象的小改动具有实用价值。
+2. **GloVe 初始化改善了当前 BiLSTM 配置。** 相同词表规则与架构下，macro-F1 从 0.824 增至 0.860，增加 3.64 个百分点。这组对照支持预训练词向量在本任务中的价值；结论范围限于当前训练与选择协议。
+3. **RoBERTa 的收益体现在负类识别。** 相对含否定标记的 TF-IDF，accuracy 增加 3.49 个百分点，macro-F1 增加 6.83 个百分点，负类 F1 增加 11.60 个百分点。更强的总体结果同时伴随少数类表现改善，适合作为摘要、主结果段和结论的共同记忆点。
+
+### 1.2 用资源成本解释模型选择
+
+资源图建议使用横轴为对数刻度的训练时间、纵轴为 macro-F1 的散点图。以完整运行的累计计时比较，TF-IDF 的向量化与拟合约为 1.14 秒，GloVe + BiLSTM 约为 215 秒，RoBERTa 约为 57 分钟；GloVe 加载另计约 35 秒。图注采用实验结果页中的计时定义，区分单模型推理与五折集成、进程 RSS 与 MPS 折末分配量。
+
+讨论按使用场景展开：频繁重训或 CPU 预算紧张时，TF-IDF 很有吸引力；更重视分类准确性和负类识别、且能承担微调成本时，当前结果支持采用 RoBERTa。GloVe + BiLSTM 提供了检验预训练初始化作用的中间层对照。
+
+## 2. 写作时保持一致的评估口径
+
+详细协议和数据统计见 [实验结果](experiment_results.md)。正文方法节与表注至少交代以下内容：
+
+- **数据基数：** 原始训练集 7,401 条，按完整评论文本去重后 7,185 条；主结果使用去重数据。原始正类比例为 85.38%，去重后为 85.40%，以 macro-F1 和负类指标补充 accuracy。训练 / 测试重叠情况作为数据描述，测试预测统一由模型生成。
+- **完整与部分运行：** 主表统一使用共享的完整 5 折。带 `_f0-1`、`partial=True` 的运行只覆盖其中的折 0、1，用于配置探索；它不是另一套完整的 2 折交叉验证。比较默认配置时也提取相同两折。
+- **折与 seed：** 当前训练 seed 均为 42，`±` 表示各折得分的总体标准差（`ddof=0`）。seed=2024、7 属于后续计划；完成后分别报告折间变动、seed 间变动和多 seed 集成结果。
+- **指标汇总：** 折均值与汇总全部 OOF 预测后计算的 pooled 指标分别命名，尤其不能混用 ROC-AUC。阈值 0.5 的主表与经选择阈值的结果分开。
+- **阈值：** 最终阈值在全部 OOF 上选择。`oof_at_threshold` 在同一组 OOF 上选择并评分；`oof_at_threshold_nested` 在其余折 OOF 上选择阈值，再应用到当前折。**这一嵌套只针对阈值，不能消除 checkpoint 或超参数选择的影响。**
+- **Checkpoint：** 神经模型使用留出折选择 macro-F1 最优的 checkpoint，记录最优与最后时点的 OOF 预测和指标。PLM 的 `*_last` 对应固定轮数末端；词向量模型对应早停时刻，而停止时刻仍依赖留出折。它们用于敏感性分析，不能直接称为整个实验流程的“无偏估计”。RoBERTa 的几种评分方式相近，也不能据此把差值当作选择偏差的上界。
+- **最终提交：** 当前单个完整运行将 5 个折模型的测试概率平均，再应用 OOF 阈值。计划中的 3 seed / 15 模型集成需完成后再写入提交方案。测试集未提供标签，CV 结果不等同于测试准确率。
+
+描述性统计应与结论保持对应：文本末尾缺少标点不等于发生字符截断，模型与标签不一致不等于标签错误，训练 / 测试的词频相似也不能证明同分布。疑似错标和截断文本通过人工复核形成案例；噪声率等总体判断需要独立证据。
+
+## 3. 按课程 a–i 组织报告
+
+以下结构对应课程 a–i 评分项，最终格式及要求以 [课程说明](assignment/EE6483-Project1.pdf) 为准。篇幅按证据分配：综述负责建立选择依据，结果与分析负责建立项目结论，操作细节集中到 README 和附录。
+
+| 部分 | 分值 | 本项目应回答的问题 | 主要证据或图表 |
+|---|---:|---|---|
+| a) 文献综述 | 20% | 不同情感分析设定需要什么方法，为什么选择当前三类表示？ | 设定对照表、分类综述、研究组精读、方法选择论证 |
+| b) 特征与预处理 | 5% | 数据特点如何影响预处理与特征构建？ | 数据画像、三分支处理流程、长度统计 |
+| c) 模型 | 15% | 分类器如何从各类表示生成预测？ | 自绘架构、维度、损失与训练配置 |
+| d) 超参数 | 5% | 已开展的配置探索支持了哪些选择？ | 两折探索表、训练曲线、阈值曲线 |
+| e) 结果与提交 | 15% | 完整运行取得什么结果，最终文件如何生成？ | 主结果表、提交对应的 run_id 与复现命令 |
+| f) 错误分析 | 10% | 主要收益和剩余错误体现在哪些文本现象？ | 测试集 1–2 个案例，辅以 OOF 混淆矩阵与复核 |
+| g) 特征格式对比 | 10% | 准确性收益需要多少训练与推理成本？ | 资源表、时间与 macro-F1 散点图 |
+| h) 无标签酒店评论 | 10% | 迁移到无标签目标域时，如何构建和评估方案？ | 领域变化分析、按标注预算组织的方案 |
+| i) 带噪评分 | 10% | 如何利用评分并处理文本与评分的不一致？ | 噪声类型、三类处理策略、可选训练噪声实验 |
+
+封面列成员信息，贡献表按 a–i 记录实际工作；正文图表逐一引用，参考文献采用统一格式。引用实际使用的外部资料，课程推荐文献可作为阅读入口。
+
+### a) 从研究设定推导方法选择
+
+先定义本项目：英文商品评论的文档级二分类，输入为文本，输出为负面 / 正面标签。样例中的鞋服和交易用语可作为内容观察；具体数据子域、原始星级与标签转换规则，需要数据说明支持后再写成事实。
+
+综述先用三个轴组织材料，再按方法家族串联论文：
+
+| 比较轴 | 两端设定 | 与本项目的关系 |
+|---|---|---|
+| 监督信息 | 有标签监督学习 / 无标签或弱监督学习 | 当前训练数据有标签；h) 讨论无标签目标域 |
+| 类别空间 | 封闭类别集 / 开放集或包含未知类别的场景 | 当前标签为 0/1；酒店评论可能需要处理中性、混合或未知情感 |
+| 领域关系 | 同域评估 / 跨域迁移 | 当前为商品评论；h) 延伸到酒店评论 |
+
+方法链可采用“词袋与线性模型 → 静态词向量与 CNN/RNN → 预训练语言模型 → 领域适应与弱监督”。每组论文说明它解决什么问题、依赖什么监督信号，以及与本项目的联系。文档级、句子级和方面级是另一条任务粒度轴，单独解释，避免与开放集混为一谈。
+
+课程 a(2) 要求快速阅读并总结数十篇论文，a(3) 要求识别 1–2 个突出的研究组，选择感兴趣的论文深入总结。保留检索关键词、数据库、时间范围和筛选标准；阅读表记录“论文 / 设定 / 方法 / 关键证据 / 本项目使用位置”，正文用代表工作串联整体认识。研究组精读可从 Bing / Zhang 的情感分析研究和 Reichart 团队的领域适应工作中选择，纳入前核对作者关系与论文内容。
+
+方法选择段直接连接已有结果：TF-IDF 建立低成本参照，GloVe 对照检验预训练初始化的价值，RoBERTa 检验更强表示能否改善少数类识别。新增模型应回答一个尚未解决的问题。
+
+### b) 预处理服务于各自的表示方式
+
+- **TF-IDF：** 使用 1–2 gram、子线性 TF、`min_df=2`、`max_df=0.95`，保留否定相关文本信号，并以同配置有 / 无否定标记的实验隔离其效果。
+- **GloVe：** 小写、拆分标点与缩写；每折训练词表中，GloVe 已有词出现至少 1 次即可收录，其他词要求至少 2 次；未见词映射至 `<unk>`。当前 BiLSTM 摘要中的 GloVe 初始化覆盖率约为 97.7%–97.9%，需注明是词表覆盖率。
+- **RoBERTa：** 使用对应预训练 tokenizer，保留原始文本的大小写与标点，最大长度 256，采用前 75% / 后 25% token 预算的 head+tail 截断。当前结果支持这一配置的可用性；head+tail 相对单侧截断的独立贡献需要专门对照。
+
+### c) 讲清模型与实际配置
+
+模型节围绕“输入表示 → 编码或特征提取 → 池化 / 分类 → 损失”说明计算流程。TF-IDF 配线性分类器；GloVe 分别接 BiLSTM 和 TextCNN；RoBERTa 使用预训练编码器与序列分类头。关键参数从 [模型配置表](experiment_results.md) 和对应 summary 提取，包括输入长度、学习率、类权重、嵌入冻结、训练轮次和选择规则。
+
+架构图应与实现一致，尤其是 BiLSTM 对变长序列的处理、池化与分类头。用维度标注连接各模块，并解释为什么这些结构适合本项目的比较目的。
+
+### d) 用已开展的探索解释超参数
+
+DistilBERT 在折 0、1 上探索学习率与类权重；随后按记录规则 `min(选定学习率, 3e-5)` 设定 RoBERTa 学习率。正文据此说明从探索到完整验证的配置选择过程。完整比较见 [两折结果](experiment_results.md)，决策记录见 [plm_sweep.json](../results/summary/plm_sweep.json)。
+
+BiLSTM 的学习率、hidden 和冻结嵌入试验也属于两折探索，正文使用默认配置的相同两折作参照。在相同折集合上描述配置差异；冻结 / 解冻涉及的机制解释作为待验证假设。
+
+建议保留一张配置表和一至两张能解释选择的曲线。已完成、预先设定和待验证三个状态分开标注，避免将建议搜索范围写成实际搜索范围。
+
+### e) 将报告结果对应到提交文件
+
+测试集未提供标签，因此 CV 分数用于描述训练数据上的验证表现。最终提交记录至少包含：run_id、seed、折数、checkpoint 规则、OOF 阈值、概率汇总方式、生成命令及输出文件。预测正类比例用于描述输出，不作为调参目标或正确性标准。
+
+### f) 让错误分析解释主结果
+
+以相同 OOF 样本比较 TF-IDF 与 RoBERTa，首先给出混淆矩阵和负类 precision / recall，再人工复核否定、转折、混合评价、领域词义、长文本和疑似标注不一致等类别。错误类型比例必须交代抽样方式、复核数量及是否允许多标签。
+
+课程 f) 要求分析测试集中的 1–2 个案例。选取包含否定、转折或混合评价的测试评论，将文本、预测概率、模型分歧和人工判断并列，并明确测试集没有官方标签。OOF 案例可补充展示“RoBERTa 正确而 TF-IDF 错误”或两者均误判的情形。词级归因辅助观察，机制解释表述为待检验假设；涉及疑似错标时，保留原标签并记录复核依据。
+
+若需要人工测试子集分析，可预先随机抽取 200–300 条，由三人独立标注并裁决分歧，报告抽样方案、标注准则、标注一致性（如适用于多人的 Fleiss' kappa）和结果区间。该结果是相对于人工标签的补充评估；低置信或模型分歧样本适合案例分析，不适合直接估计总体测试准确率。此项尚需实际完成后才能写入结果。
+
+### g) 让资源表服务于模型选择
+
+从 [实验结果](experiment_results.md) 提取完整运行的资源表。补充特征维度、参数量和内存时，分别说明其含义：TF-IDF 的维度是词表大小，GloVe 的 300 是单词向量维度，RoBERTa 的 768 是隐层维度；它们不代表相同的总存储量。参数量说明嵌入是否可训练，内存则区分进程峰值 RSS 与各折结束时记录的 MPS 驱动分配量。后者的最大记录值不等于全程峰值，两类字段也不能直接合并为“总内存”。
+
+### h) 无标签酒店评论：明确目标域方案与验证方式
+
+本节将商品评论的发现延伸为酒店域的迁移方案，性能结论留待目标域实验建立。可从词汇变化、多方面评价、文本长度和类别比例变化解释风险：例如，退货、尺码和物流词汇在酒店评论中的作用可能改变。预训练表示值得作为迁移起点，其收益仍需目标域评估。
+
+按数据预算提出可执行方案：
+
+| 可用资源 | 方案 | 评估与选择方式 |
+|---|---|---|
+| 目标域无标签文本 | 源域模型直接迁移，辅以词典 / 零样本方法作参照；探索目标域语言建模或一致性训练 | 先说明无标签时哪些指标无法观测，再设计人工审查 |
+| 少量人工标注预算 | 建立目标域验证与评估样本，优先覆盖混合情感及模型分歧 | 将用于模型选择的样本与最终评估样本分开 |
+| 较多无标签文本与可靠初始模型 | 高置信伪标签、自训练，或领域适应后微调 | 检查类别覆盖，使用独立目标域标签评价收益 |
+
+选择一个主方案解释步骤与理由即可，例如“源域 RoBERTa 起步 → 目标域文本适应 → 少量人工标签用于选择和校准 → 独立样本评价”。完全无标签时以定性审查描述输出；获得目标域标签后，再评价准确率并校准阈值。酒店扩展与课程商品评论提交分开记录。
+
+### i) 带噪评分：利用评分结构组织三类策略
+
+先区分随机翻转、类别相关噪声和文本实例相关噪声，再说明评分可能同时包含产品、服务与物流体验。当前数据没有经独立复核得到的噪声率；模型高置信分歧可用于安排复核顺序。
+
+1. **损失与训练策略：** 比较普通交叉熵、标签平滑或噪声鲁棒损失，解释它们如何改变对单个标签的依赖；独立验证集用于选择训练轮次。
+2. **样本识别与协同训练：** 讨论 confident learning、Co-teaching 等方法，将可疑样本作为复核对象；任何过滤策略通过对照实验评估。
+3. **利用评分的序数信息：** 若目标数据确实包含星级，可按评分距离中性位置的程度设置权重、构建软标签，或采用序数预测。极端评分是否更可靠仍需样本核查。
+
+可选的小实验是在训练折注入 10% / 20% / 30% 对称噪声，保持留出折原始标签不变，比较少量有明确目的的策略，并报告负类 F1。它测量指定合成噪声下的变化，结果按注入机制解释。该实验完成前列为设计。
+
+## 4. 后续工作、分工与交付
+
+目前已经有三类表示方式的完整结果，后续优先把证据整理成可复核的报告。追加实验应服务于具体论点。
+
+| 优先级 | 工作 | 完成标志 |
+|---|---|---|
+| 1 | 固定主结果表、评估说明和最终提交方案 | 每个数字可追溯到 run_id；报告模型与提交生成配置一致 |
+| 2 | 完成 OOF 对照案例与负类分析 | 样本选择规则、复核记录、混淆矩阵和案例成套 |
+| 3 | 完成综述及 h/i 论证 | 核心论点有来源，研究设定与本任务对应 |
+| 4 | 补充主模型 seed=2024、7 | 与 seed=42 共用划分，分别报告 seed 变动与集成结果 |
+| 5 | 按论点补一个必要对照 | 例如冻结 RoBERTa 表示与微调对照；先说明要回答的问题 |
+
+### 三人分工建议
+
+| 角色 | 负责章节 | 交付物 |
+|---|---|---|
+| A：建模与复现 | b/c/d/e | 配置与结果核对、必要补充运行、提交生成记录、README |
+| B：结果与分析 | f/g，以及 d 的曲线 | OOF 复核、案例、资源表、图表说明 |
+| C：综述与整合 | a/h/i | 文献阅读与引用核查、迁移 / 噪声方案、统一术语、贡献表 |
+
+各成员交叉审阅另一人的章节；贡献表填写实际工作。图表、阅读记录和结果文件共享，使正文编写可以同步推进。
+
+### 建议时间线
+
+课程说明的截止时间为 **2026 年 11 月 13 日 23:59**；上传形式与最终通知以课程平台为准。以下是内部进度建议：
+
+| 日期 | 交付节点 |
 |---|---|
-| train / test | 7401 / 1851 条; train 有 `reviews`+`sentiments`, test 只有 `reviews` |
-| 类别 | 正 6319 (85.38%) / 负 1082 (14.62%); 全预测 1: acc 0.854, macro-F1 0.461 |
-| 词数 (空格分词) | train mean 56.7 / median 42 / p95 143 / max 1066; test 几乎相同 (KS p=0.157) |
-| RoBERTa 子词数 **[实测]** | median 54, p95 182; >128 token 占 11.5%, >256 占 2.3%, >512 占 0.3% |
-| 负面更长 | 负 mean 62 词 vs 正 56 词; 错误率随长度上升 (<20 词 6% → >160 词 10.7%) |
-| train 内重复 | 151 个文本重复共 367 行, 冗余 216 行; 重复间标签无冲突; 去重后 7185 |
-| test 内重复 | 18 个文本共 39 行 |
-| **train/test 重叠** | 87 个唯一文本 = test 101 行 (5.46%) = train 136 行; 按文本 71 正 / 16 负; 都是普通评论不是模板 |
-| 末尾截断 | 只有 24% 的文本以标点结尾, 7.7% 末尾词疑似被截 ("quick shippin", "agai", "servic"); train/test 同样受影响, 不需要也无法修复, 但要在 b) 里写出来, 错例分析时别当成用户拼写错误 |
-| 标签噪声 | OOF 高置信反向样本约 1-2%; 实锤例子: 标 0 的 "My tween daughter loves these Saucony Jazz shoes... comfortable and stylish", 标 1 的 "i regret to say that i did not receive the shoes..!!" |
-| 分布偏移 | **无**: 前 2000 高频词重合 83.5%, unigram JS 散度 0.04 bit, token 级 OOV 仅 1.76% (品牌名/错字); CV 分数可直接预测 test |
-| 最强判别词 | 负: not, return(ed), disappointed, cheap, poor, refund, waste, money, sent, company; 正: great, comfortable, love, perfect, nice, well, best |
-| 转折/否定 | 含 but/however 的评论 acc 0.890 vs 不含 0.948; 含否定词 0.900 vs 0.954 → BoW 的两大失败源, 正是 RNN/BERT 的卖点 |
+| 10/23–10/28 | 固定报告主线，完成主表与配置核对；综述、数据与方法章节形成初稿 |
+| 10/29–11/03 | 完成优先补充实验、OOF 案例和资源图；确定最终提交配置 |
+| 11/04–11/07 | 合并 a–i 全文，所有图表入文，核对论断与来源 |
+| 11/08–11/10 | 交叉审阅；按 README 复现提交；统一引用、图注和术语 |
+| 11/11 | 冻结终稿、提交文件与贡献表，核对课程平台上传要求 |
+| 11/12 | 提交并下载核对，留出一天处理文件问题 |
 
-要点: 负面信号大量是 "退货 / 退款 / 客服 / 物流" 的事务性词, 这是电商服装类评论的领域特点, 也是 h) 题 (迁移到酒店评论) 论证 "词级模型会明显掉分" 的数据依据。
+## 5. 复现与提交检查
 
----
+复现分为“从保存概率生成预测”和“重新训练验证结果”两层。第一层应确认输入概率、阈值及文本顺序一致；第二层同时记录环境、硬件、seed 与结果变化。固定 seed 有助于复现，不能自动保证不同硬件上的逐位一致。
 
-## 2. 评估与复现协议 (所有模型共用)
-
-```
-读 json → 记录重复/重叠统计 → 按 reviews 去重 (7401 → 7185)
-→ StratifiedKFold(n_splits=5, shuffle=True, random_state=42), fold id 存 data/folds.csv
-→ 每种特征各自 tokenize (TF-IDF / GloVe / PLM), 所有 fit 只在训练折
-→ 指标: accuracy, macro-F1, F1(neg), precision/recall(neg), ROC-AUC, 混淆矩阵
-→ 保存每折 OOF 概率 results/oof/{model}_{seed}.npy 和 test 概率 results/test_probs/
-→ 主模型 3 seed (42, 2024, 7) × 5 折, 报 mean ± std
-→ 最终预测 = 15 个折模型的 test 概率平均 (软投票) + OOF 上选的阈值; 不做全量重训
-```
-
-- 去重后 CV 会比不去重低约 0.3 pt (0.923 → 0.920) **[实测]**, 那是去掉折间泄漏后的真实值, 报告用去重后的数字。
-- **不要从 train 删掉与 test 重叠的 87 条** (它们是合法训练数据), 也不要用 train 标签覆盖 test 预测。全量 LR 对这 101 行预测与 train 标签一致 99/101, 差异最多 2 行。
-- 固定种子: `random / numpy / torch.manual_seed / torch.mps.manual_seed / PYTHONHASHSEED / DataLoader generator + worker_init_fn`。MPS 和 CUDA 的部分算子不保证逐位确定, 报告里写 "固定种子 + 3 seed 平均" 而不是声称完全确定。
-- 阈值规则 (评分口径未知时的折中): 在 OOF 上取 "macro-F1 最大且 accuracy 不低于最大值 0.3 pt" 的阈值。实测 acc 最优阈值 0.4、macro-F1 最优 0.5, 这条曲线放进 d)。
-- `make_submission.py` 两个模式: `--from-probs` (从版本库里的 .npy 逐字节复现, 评分人可直接跑) 和 `--retrain` (约 70 min, 复现到 ±std)。.npy 和 fold id 一起提交。
-
----
-
-## 3. 建模路线
-
-### 3.1 模型梯队
-
-| 层 | 特征 / 模型 | 作用 | 5 折 acc / macro-F1 |
-|---|---|---|---|
-| A | TF-IDF 1-2gram + NOT_ 否定标记 + LR(C=4, balanced) 或 LinearSVC | baseline; g) 的便宜端; 错例分析参照 | **[实测]** 0.929 / 0.860; LinearSVC 0.927 / 0.852 |
-| B | GloVe 300d + BiLSTM (mask mean+max 池化) / TextCNN | 满足 "RNN" 要求; c) 架构图; g) 中间档 | **[估算]** 0.92-0.93 / 0.84-0.86 |
-| C | **roberta-base 微调 (主模型)**; distilbert 扫参 + 中间档; bert-base-uncased 一组对照 (PDF 引用 [4]) | 最终提交; g) 的贵端 | **[估算]** 0.935-0.95 / 0.88-0.90 |
-| C' | roberta-base 冻结, [CLS]/mean-pool 特征 + LR | 同一 PLM "特征提取 vs 微调", g) 最干净的对比 | — |
-| D (可选) | 15 模型软投票集成; deberta-v3-base (Colab); Qwen2.5-0.5B/1.5B + LoRA; LLM zero-shot 对照 | 加分项, 全部必做项完成后再碰 | — |
-
-合理预期: 本数据有 1-2% 明显标签噪声且负类只有 15%, roberta 合理目标是 acc 0.935-0.95 / macro-F1 0.88-0.90。**不要因为没到 95% 就反复调参或怀疑实现有误**; 若低于 0.93 多半是 lr / 不平衡 / 阈值没处理好。
-
-### 3.2 训练时间与内存 **[实测, M5 MPS, pad 到 max_len, 不含评估]**
-
-| 模型 | 精度 | max_len/bs | 参数 | min/epoch | 5 折 × 3 ep | 峰值内存 | 推理 1851 条 |
-|---|---|---|---|---|---|---|---|
-| distilbert-base-uncased | fp32 | 128/32 | 67M | 1.8 | 22 min | 3.3 GB | 7.5 s |
-| roberta-base | fp32 | 128/32 | 125M | 3.6 | 44 min | 6.9 GB | 13.7 s |
-| **roberta-base** | **fp16 autocast** | 128/32 | 125M | 2.0 | **23 min** | 6.5 GB | 5.5 s |
-| roberta-base | fp32 | 256/16 | 125M | 7.9 | 94 min | 7.8 GB | 29 s |
-| bert-base-uncased | fp32 | 128/32 | 110M | 3.6 | 43 min | 6.8 GB | 13.4 s |
-| deberta-v3-base | fp32 | 128/32 | 184M | — | **loss=NaN, MPS 不可用** | 7.6 GB | — |
-| BiLSTM 300/256 (mask 池化) | fp32 | 128/64 | 3.5M | 0.075 | 5 折 × 10 ep 3 min | <1 GB | 秒级 |
-| BiLSTM (pack_padded_sequence) | fp32 | 128/64 | 3.5M | 0.93 | 37 min | — | — |
-| TextCNN | fp32 | 128/64 | 2.8M | 0.03 | 1 min | — | — |
-| TF-IDF uni+bi + LR | CPU | — | 38k 维 | 0.41 s fit + 1.8 s 训练 | 秒级 | 278 MB | 毫秒级 |
-
-Colab 免费 T4 **[估算]**: roberta fp16 len128 约 1.1 min/epoch, 5 折 15-20 min; 只在跑 deberta-v3 或赶时间时用, 每折结束立刻把概率存到 Drive。
-
-### 3.3 超参数 (对应报告 d)
-
-**max_len**: 扫参用 128 (覆盖 88.5% 子词长度); 最终用 256 + 动态 padding (按 batch 内最长 pad, 中位数只有 54 所以额外开销小) + 对超长样本 head+tail 截断 (前 ~75% + 后 ~25%, 因为结论常在结尾, 引 Sun et al. 2019)。d) 里用**子词**统计论证, 不要用空格词数 (93.6% 那个数字是词数口径)。
-
-**A 层**: `TfidfVectorizer(ngram_range=(1,2), min_df=2, sublinear_tf=True, token_pattern=r"(?u)\b\w[\w']*\b")` (默认 pattern 会把 don't 切成 don); 否定标记: not/no/never/n't/cannot/without 之后到下一个标点的词加 `NOT_` 前缀 (+1.2 pt macro-F1, 零成本, 引 Pang et al. 2002)。LR C ∈ {0.5,1,2,4,8}, LinearSVC C ∈ {0.1,0.25,0.5,1}, `scoring='f1_macro'`。实测 C=1 时 uni+bi 反而比 unigram 差 (正则太强退化到多数类), C=4-10 才正常 — d) 可用这组数字讲超参交互。不去停用词 (not/but/the/was 都是强判别词), 不词干化, 不拼写纠正。
-
-**B 层**: 小写 + 保留标点 token, 与 GloVe 6B 分词风格一致; 词表 min_count=2 (约 7.5k 词), 记录 GloVe 覆盖率; 词级 max_len 160; emb 先冻结 1-2 epoch 再解冻 (或 emb lr 降 10 倍); hidden {128, 256}, layers {1, 2}, dropout {0.3, 0.5}; Adam lr {5e-4, 1e-3, 2e-3}; 梯度裁剪 1.0; ≤15 epoch, 按验证 macro-F1 早停 (patience 3); 加权 CE。不做否定标记 (会让词全部 OOV)。
-
-**C 层**:
-
-| 超参 | 初始 | 范围 | 理由 |
-|---|---|---|---|
-| lr | 2e-5 | {1e-5, 2e-5, 3e-5, 5e-5} | BERT/RoBERTa 标准范围; 小数据偏小更稳 (Mosbach 2021) |
-| batch | 32 (fp16) / 16 (len256) | {16, 32} | 16 GB 下 roberta len128 bs32 占 6.5-6.9 GB |
-| epochs | 3 | {2, 3, 4} | 7k × 3 ≈ 700 步, 再多过拟合; 每半 epoch 评估取最佳 |
-| warmup | 10% | {6%, 10%} | 线性 warmup + 线性衰减 |
-| weight decay | 0.01 | {0, 0.01, 0.1} | AdamW 默认 |
-| dropout | backbone 0.1 不动, head 0.1-0.3 | — | — |
-| loss | CE 或温和加权 CE (sqrt 反频率, 约 2.5:1) + label smoothing 0.05-0.1 (可选, 顺便对应 i) | — | 见第 2 节阈值规则 |
-| 梯度裁剪 | 1.0 | — | — |
-
-扫描策略: distilbert 在 5 折上扫 lr × epochs (每组约 22 min) → 把最优区间带到 roberta 细扫 lr ∈ {1e-5, 2e-5, 3e-5} (每组 fp16 约 23 min) → 全部一个下午。
-给 PLM 的文本**几乎不做预处理**: 不小写 (roberta 区分大小写)、不去标点/表情、不去停用词、不做否定标记、不要先 nltk 分词再拼回去。
-
-### 3.4 MPS 专属的坑 **[实测踩到]**
-
-- `pack_padded_sequence` 在 MPS 上慢 12 倍 (479 vs 39 ms/step): BiLSTM 用 mask 做 mean/max 池化。
-- `nn.Embedding` 索引越界在 MPS 上**不报错**, 换 CPU 立刻 IndexError: 任何新模型先在 CPU 跑 2 个 batch 做 sanity check。
-- fp16 autocast 对 roberta/bert/distilbert 正常 (loss 0.295 无 NaN, 快 1.85 倍); 每次训练打印前 50 步 loss, NaN 则回退 fp32。bf16 不要用。
-- deberta-v3-base fp32 在 MPS 上 23 步后 loss=NaN; 报告里只写 "我们在 MPS 上观察到 NaN, 故改在 Colab 跑", 不要写成 "已知问题"。
-- `export PYTORCH_ENABLE_MPS_FALLBACK=1` 让未实现算子回退 CPU。
-- 跑 roberta 时关掉浏览器等大应用; OOM 就 batch 8 + gradient accumulation。
-- transformers 4.41+ 把 Trainer 的 `evaluation_strategy`/`tokenizer=` 改成 `eval_strategy`/`processing_class=`, 网上旧教程会报错; 建议自己写 100 行以内的 PyTorch 训练循环, c) 里反而更好解释 loss/训练策略, 也便于插加权 CE、head+tail 截断、多 seed。
-- 只存 OOF 和 test 概率 (.npy), 不要存 15 个 roberta checkpoint (7.5 GB); 最多存最优 seed 的一折权重用于演示。
-
----
-
-## 4. 环境与仓库
-
-### 4.1 环境搭建 (推荐, 已验证可用的组合)
+从已保存的 RoBERTa 概率生成独立候选文件，并与现有提交比较：
 
 ```bash
-python3 -m venv ~/venvs/ee6483          # base 的 Python 3.13; 不要建在 OneDrive 目录里
-source ~/venvs/ee6483/bin/activate
-python -m pip install -U pip
-python -m pip install torch             # macOS arm64 的 PyPI wheel 自带 MPS, 不需要 --index-url
-python -m pip install transformers accelerate datasets scikit-learn pandas numpy scipy gensim nltk matplotlib seaborn tqdm jupyter ipykernel sentencepiece
-python -m ipykernel install --user --name ee6483 --display-name "Python (ee6483)"
-python -c "import torch, transformers, sklearn; print(torch.__version__, torch.backends.mps.is_available(), transformers.__version__, sklearn.__version__)"
-pip freeze > requirements.txt           # 交报告时附上
+python -m src.make_submission --summary results/summary/roberta_base_len256_seed42.json --out submissions/submission_roberta.csv --compare submissions/submission.csv
+python -m src.check_submission submissions/submission_roberta.csv
 ```
 
-- **不要用现有的 conda `torch` 环境**: Python 3.10 的 scipy wheel 在 macOS 27 上 `scipy.sparse/linalg/stats` 全部 dlopen 失败 (`__thread_bss ... offset field is not zero`), sklearn 装上也 import 不了 **[实测]**。
-- README 里的 `python3 -m venv .venv` 会把 venv 建进 OneDrive, 建议改成上面的路径。
-- `.git` 放在 OneDrive 同步目录里是已知的仓库损坏源: 建议 `git clone` 到 `~/code/ee6483` 工作, OneDrive 只放交付物 (报告、submission.csv)。HF cache (`HF_HOME`)、GloVe (`~/gensim-data`)、checkpoint 同样放本地。
-- GloVe 用 `gensim.downloader.load("glove-wiki-gigaword-300")` (约 376 MB) 最省事。
+最终采用哪个模型，就用其 summary 生成课程要求的 `submissions/submission.csv`，并同步报告中的生成记录。训练命令、依赖版本和完整运行入口统一维护在 [README](../README.md)，本文不另设一套环境安装流程。
 
-### 4.2 仓库结构建议
+提交前核对：
 
-```
-ee6483-sentiment/
-  README.md             # 环境安装、每个实验一条命令、如何复现 submission.csv
-  requirements.txt
-  configs/              # tfidf_lr.yaml, glove_bilstm.yaml, roberta.yaml (所有超参在这里)
-  data/raw/             # train.json, test.json
-  data/folds.csv        # 去重后的 fold id (所有模型共用)
-  src/
-    data.py             # 读 json、去重、切折
-    features/           # tfidf.py, glove.py, tokenize.py (head+tail 截断)
-    models/             # linear.py, rnn.py, cnn.py, plm.py
-    train.py            # --config --seed --fold → results/runs.csv + results/oof/
-    predict.py          # 集成 → 阈值 → outputs/submission.csv
-    metrics.py  utils/seed.py  utils/resources.py (计时/内存)
-  notebooks/            # 01_eda, 02_tfidf_baseline, 03_error_analysis, 04_resource_table
-  results/              # runs.csv, oof/*.npy, test_probs/*.npy, figures/
-  outputs/submission.csv
-```
+- `submission.csv` 的列名为 `reviews,predictions`，无额外索引列；1,851 条评论与测试集逐条、逐序一致，预测值为整数 0/1。评论可能包含换行，使用 CSV 解析后的记录数核验。
+- 特征拟合、训练、早停和阈值选择使用训练数据；训练 / 测试重叠样本采用与其他样本相同的模型预测流程。
+- 保存最终 run_id 对应的 summary、OOF 概率、测试概率和共享划分；完整运行与部分运行明确标记。
+- 正文中的主结果、checkpoint 诊断和阈值结果使用各自的准确字段；`runs.csv` 同名运行会替换已有记录，引用终稿数据时保存对应版本。
+- 报告包含成员贡献与实际使用的资料引用；上传后的文件与本地终稿一致。
 
----
+## 6. 文献候选清单与阅读用途
 
-## 5. 报告结构、分工、时间线
+以下延续原项目的阅读线索，并按写作目的分组。**这是待核查候选清单，本次文字修订未逐篇核验书目信息或论文结论。** 正式引用前核对标题、作者、年份、发表版本与原文依据；最终数量按课程要求和正文需要确定。
 
-### 5.1 报告结构 (LaTeX/Overleaf, IEEE 或 ACL 模板, 正文 20-25 页 + 附录; 章节标题直接带 a)-i))
-
-| 章节 | 内容与图表 | 篇幅 | 分值 |
-|---|---|---|---|
-| 封面 + 贡献表 | 姓名/学号; **按题 a-i 列每人贡献** (PDF 明确要求) | 0.5 页 | 必需 |
-| 1 引言 | 任务、数据来源 (Blitzer 2007, 内容推断为服装鞋饰类)、一句话说明 PDF 笔误的理解 (json 非 csv; test.json; (i) 的 "(g)" 指 (h)) | 0.5 页 | — |
-| 2 文献综述 (a) | 2.1 问题定义 + 挑战 + **3×2 设定对照表**; 2.2 检索方法 + **20-30 篇论文表** + taxonomy 图; 2.3 两个研究组精读; 2.4 baseline 选择与改进点 | 5-6 页 | 20 |
-| 3 数据与预处理 (b) | 第 1 节的数据画像表; 长度直方图 (标 128/256 线); 重复/重叠/截断说明; 三分支预处理流程图; **写明不做什么及为什么** | 1.5 页 | 5 |
-| 4 模型 (c) | 每个模型: 自绘架构图 (token ids [B,256] → 12 层 → [CLS] 768 → dropout → Linear 768→2)、维度表、损失公式、训练策略; 复现协议; 代码/README 指向附录 | 3-4 页 | 15 |
-| 5 超参数 (d) | 超参表 (范围/选定/理由); lr × epoch × max_len 验证曲线; C × class_weight × 阈值交互表 | 1-1.5 页 | 5 |
-| 6 结果与提交 (e) | **主结果表** (所有模型 CV mean±std, **第一行放 "全预测 1 = 85.4%"**); 混淆矩阵; test 预测正负比例; submission 生成过程; 声明测试标签未知、test 文本未参与任何训练 | 1.5 页 | 15 |
-| 7 错误分析 (f) | OOF 混淆矩阵; 错误类型占比表; 人工标注 test 子集的结果 + kappa; 1-2 案例 + 词级归因 (LR 系数 / Captum IG) | 1.5-2 页 | 10 |
-| 8 特征格式对比 (g) | 资源-精度对照表 (写明计时条件); 训练时间(log) vs macro-F1 散点图; 场景化建议 | 1.5 页 | 10 |
-| 9 无标签酒店评论 (h) | 见 6.8 | 1.5-2 页 | 10 |
-| 10 噪声标签 (i) | 见 6.9 | 1.5-2 页 | 10 |
-| 11 结论 | 3-5 句 | 0.3 页 | — |
-| 参考文献 | IEEE 编号, 正文每个论断带标号, 含 PDF 给的 5 条 | 1-2 页 | 必需 |
-| 附录 | A 代码 + README; B 完整超参网格; C 额外样本; D GenAI 使用声明 (按课程规定) | 不限 | — |
-
-### 5.2 三人分工 (按题分, 写作 60% 必须有人全职写)
-
-| 成员 | 负责 | 具体 |
+| 阅读目的 | 候选工作 | 在正文中回答的问题 |
 |---|---|---|
-| A 建模与工程 | b, c, d, e (40%) | 环境、数据模块与 fold 文件、TF-IDF baseline + 保底 submission (D2)、roberta 主模型、3 seed 协议、`make_submission.py`、README |
-| B 实验与分析 | f, g, d 的实验部分 | GloVe + BiLSTM/TextCNN、冻结 roberta 特征 + LR、资源测量脚本、超参曲线、OOF 错例分析、test 子集标注组织、所有图表 |
-| C 综述与开放题 + 整合 | a, h, i (40%) | 文献检索 (Zotero)、a(1)-(4)、h/i 撰写、噪声注入小实验、参考文献核对、报告模板与整合、贡献表 |
+| 任务定义与综述 | Pang & Lee (2008)；Bing Liu 的情感分析专著；Zhang, Wang & Liu (2018)；Wankhade et al. (2022)；Zhang et al., *Sentiment Analysis in the Era of Large Language Models: A Reality Check*；Jurafsky & Martin 的分类相关章节 | 情感分析有哪些任务设定，当前比较覆盖了哪一部分？ |
+| 经典分类与基准 | Pang, Lee & Vaithyanathan (2002)；Turney (2002)；Hu & Liu (2004)；Wang & Manning (2012, NBSVM)；Maas et al. (2011, IMDb)；Socher et al. (2013, SST)；Zhang, Zhao & LeCun (2015) | 为什么词袋与线性模型适合作为参照？ |
+| 静态词向量与神经网络 | Pennington et al. (GloVe)；Kim (2014, TextCNN)；Tang, Qin & Liu (2015)；Yang et al. (2016, HAN)；Joulin et al. (2017, fastText)；Howard & Ruder (2018, ULMFiT) | 初始化、局部模式和序列结构分别提供什么能力？ |
+| 预训练与微调 | Peters et al. (ELMo)；Devlin et al. (BERT)；Liu et al. (RoBERTa)；Sanh et al. (DistilBERT)；Clark et al. (ELECTRA)；He et al. (DeBERTa / DeBERTaV3)；Sun et al. (BERT 微调策略)；Mosbach et al. (微调稳定性)；Zhang et al. (few-sample fine-tuning)；Hendrycks et al. (预训练与分布外鲁棒性) | 当前编码器与训练策略的文献依据是什么？ |
+| 情感与领域预训练 | Xu et al. (2019)；Gururangan et al. (DAPT / TAPT)；Tian et al. (SKEP)；Yin, Meng & Chang (SentiBERT)；Ke et al. (SentiLARE) | 通用预训练如何与任务、领域知识结合？ |
+| 少样本与 LLM | Schick & Schütze (PET)；Gao, Fisch & Chen (LM-BFF)；Tunstall et al. (SetFit)；Liu et al. (prompting 综述)；Wang et al., *Is ChatGPT a Good Sentiment Analyzer?*；Gilardi et al. (LLM 标注)；Sun et al. (CARP)；Fei et al. (隐式情感推理) | 标注预算不足时有哪些替代路径？ |
+| 领域适应与无标签学习 | Blitzer et al. (2007, SCL)；Pan et al. (SFA)；Glorot et al. (2011)；Ganin et al. (DANN)；Ziser & Reichart (PBLM)；Ben-David et al. (PERL / PADA)；Han & Eisenstein (AdaptaBERT)；Karouzos et al. (UDALM)；Ramponi & Plank (领域适应综述)；Xie et al. (一致性训练)；Meng et al. (LOTClass)；Yin, Hay & Roth (NLI 零样本)；Hutto & Gilbert (VADER)；Taboada et al. (SO-CAL) | h) 中哪些方法能利用目标域无标签文本，各自需要什么假设？ |
+| 标签噪声 | Natarajan et al. (2013)；Arpit et al. (记忆现象)；Han et al. (Co-teaching)；Zhang & Sabuncu (GCE)；Wang et al. (SCE)；Müller et al. (label smoothing)；Li et al. (DivideMix)；Northcutt et al. (confident learning / 基准标签错误)；Jindal et al. (文本噪声转移层)；Zhu et al. (*Is BERT Robust to Label Noise?*)；Swayamdipta et al. (dataset cartography)；Song et al. (噪声标签综述) | i) 中损失、样本选择与训练动态如何应对不同噪声？ |
+| 类别不平衡 | Lin et al. (focal loss)；Cui et al. (class-balanced loss)；Li et al. (Dice loss)；Johnson & Khoshgoftaar (不平衡学习综述) | 为什么关注负类，如何区分损失加权、阈值与评价指标的作用？ |
 
-补充: 30 篇 ★ 快读论文三人各读 10 篇, 填共享阅读表 (论文 / 会议年 / 谁读 / 一句话 / 引用在哪节), 既分摊工作也是贡献证明。
-依赖: f 等 A 的主模型冻结 (D12), 但 B 可先用 baseline OOF 搭流程; g 要求三条流水线同一协议 (D0 定死); a(4) 等 D7 三种特征的 CV 数字出来再定稿; 每人 review 另一人的章节。
+优先精读与已完成模型、h/i 方案直接相关的工作；其他论文用于补全研究版图。每次引用记录它支持的具体论断，文献中的其他数据集结果不直接转换成本项目的预期分数。
 
-### 5.3 22 天时间线
+## 7. 可用于正式报告的文字草稿
 
-| 日期 | 里程碑 |
-|---|---|
-| 10/22-24 (D0-2) | 启动会定协议; venv + 仓库; A: EDA + **TF-IDF baseline + submission v1**; B: GloVe 下载、DataLoader、资源测量脚本; C: 读 2-3 篇综述, 建 Zotero |
-| 10/25-28 (D3-6) | A: distilbert/roberta 在 MPS 跑通 (fp16, 前 50 步查 NaN); B: BiLSTM/TextCNN + 冻结特征 + LR; C: a(1)(2) 初稿 |
-| **10/29 (D7)** | 里程碑 1: 三种特征在同一组折上都有数字; 定主模型路线; C 与 A 对齐 a(4) |
-| 10/30-11/2 (D8-11) | A: 主模型扫参, 3 seed; B: g 表、d 曲线、OOF 错例流程, 组织 test 子集标注; C: a(3) 精读、h/i 初稿、噪声注入实验 (TF-IDF 版很便宜) |
-| **11/3 (D12)** | 里程碑 2: 主模型冻结; OOF + test 概率入库; submission v2 通过自检 |
-| 11/4-6 (D13-15) | B: f 案例 + 归因图; A: 写 b/c/d/e, 画架构图; C: 完成 a/h/i。**11/5 最晚降级点** |
-| **11/7 (D16)** | 里程碑 3: 报告初稿 v1, 所有图表入文 |
-| 11/8-10 (D17-19) | 交叉审稿; 补漏; 代码清理; **全新 venv 按 README 复跑**, 确认 submission.csv 逐字节一致; 一人逐条核对参考文献 |
-| 11/11 (D20) | 终稿; 最终 submission 自检; 贡献表; 确认 NTULearn 上传格式 (zip 还是分开) 与代码提交方式 |
-| 11/12 (D21) | **提交** |
-| 11/13 | 只做应急 |
+以下草稿对应当前单 seed 结果；补充实验或最终提交方案改变后，同步更新。方法节和表注应保留第 2 节的完整评估口径。
 
----
+### 摘要草稿
 
-## 6. 各题答题要点与失分点
+英文商品评论中的类别不平衡，使总体准确率难以完整反映负面评论的识别质量。本项目在去重后的 7,185 条训练评论上，使用共享的五折划分，比较 TF-IDF 线性分类器、GloVe 神经模型与 RoBERTa 微调，并同时评价准确性、负类表现和计算成本。在 seed=42、阈值 0.5 的实验中，RoBERTa 的折均值 accuracy、macro-F1 和负类 F1 分别达到 0.962、0.923 和 0.868；相对含否定标记的 TF-IDF，macro-F1 与负类 F1 分别增加 6.83 和 11.60 个百分点。GloVe 初始化使 BiLSTM 的 macro-F1 从 0.824 提高至 0.860，而 TF-IDF 以秒级的五折特征构建与拟合成本达到 0.854。结果为该任务提供了明确的资源选择依据：TF-IDF 适用于低成本部署，RoBERTa 适用于更重视分类质量与负类识别的场景。
 
-### 6.1 a) 文献综述 (20%)
-- **a(1)** 问题定义: 输入文本 x → y ∈ {0,1}; 粒度 (文档/句子/方面级); 本项目 = 文档级、二分类、closed-set、单领域。**写明标签来源**: Blitzer 数据标签由星级转换 (论文里 processed 版本规则: >3 星正, <3 星负, 3 星剔除), 写成 "likely derived from star ratings", 这直接连到 h (无评分) 和 i (评分噪声)。PDF 引言写 "positive, negative and neutral" 而本数据是二分类且 3 星被剔除 — 一句话就能把 closed-set/open-set 和 h) 的酒店场景 (评论常是混合/中性) 连起来。
-- 挑战清单 (每条配引用): 否定与转折、反讽、领域依赖 (small/tight 在鞋类偏负)、类别不平衡、隐式情感、长文本截断、标注噪声、评测可靠性。
-- **3×2 设定对照表** (评分人明示要看): supervised (BoW+SVM → CNN/RNN → PLM 微调 → 情感专用预训练) vs unsupervised (词典 VADER/SO-CAL、LOTClass、NLI 零样本、LLM 零样本); closed-set vs open-set (OOD 检测 max-softmax、多语 MARC、方面级/四元组); with vs without domain shift (SCL → SFA → DANN → PBLM/PERL → DAPT/TAPT → UDALM → PADA; Hendrycks 2020 "预训练本身提升 OOD 鲁棒性")。
-- **a(2)**: 20-30 行论文表 (论文/年份/会议/方法家族/数据集/关键结果/与本项目关系) + taxonomy 图; **必须写明检索方法** (关键词、ACL Anthology、Semantic Scholar 引用图从 BERT 和 Blitzer 2007 前后扩展、Papers with Code SST-2/IMDb/Amazon Polarity 榜单、年份范围、筛选标准)。
-- **a(3)** 研究组 (必须是真正的一个组, 不要把 Google/Meta/微软的 BERT 谱系凑成一组): 首选 **Lidong Bing / Wenxuan Zhang 团队** (ABSA 综述 TKDE; "Sentiment Analysis in the Era of LLMs: A Reality Check", Findings of NAACL **2024**; 生成式 ABSA), 覆盖 closed→open 与微调小模型 vs LLM 两条主线; 第二个 **Roi Reichart 团队 (Technion)** (PBLM NAACL 2018 → PERL TACL 2020 → PADA TACL 2022), 与 Blitzer 数据同源, 直接服务 h)。每篇 0.5-1 页: 动机、方法 (自己重画示意图)、实验、局限、对本项目的启示。
-- **a(4)** 论证链: baseline = TF-IDF + LR/SVM (NBSVM Wang & Manning 2012; 老师给了示例; 秒级可跑; 系数可解释); 主模型 = 微调 PLM (BERT → RoBERTa/DeBERTa 在 SST-2/IMDb 持续领先; Hendrycks 2020 抗偏移; Zhang 2024 证明有标注数据时微调小模型 ≥ 零样本 LLM, 不必追 LLM)。改进点要**针对本数据**: 不平衡 → 加权 CE/阈值 + macro-F1; 小数据微调不稳 → 小 lr + 多 seed (Mosbach 2021); 截断 → 256 + head+tail (Sun 2019); 重复 → 去重分层 K 折; 87 条重叠 → 只讨论不利用; 标签噪声 → confident learning 找可疑样本。
-- 失分点: 只罗列不综合; 没有检索方法; 小标题不对应 (1)-(4); 漏 open-set; 精读变摘要翻译; 引用不统一或正文无标号; 大段复述原文。
+### 主结果段草稿
 
-### 6.2 b) 特征与预处理 (5%)
-数据画像表 + 三分支流程图 + 每分支的参数 (TF-IDF 词表 38k/40k、GloVe 覆盖率、PLM 子词截断比例) + **明确写 "所有 fit 只在训练折"** + 写明**不做什么及理由** (BERT 不去停用词/不词干化; TF-IDF 不去停用词因为 not/but 是强特征)。
+RoBERTa 的优势同时出现在总体准确性和少数类识别上。与含否定标记的 TF-IDF 相比，其五折 macro-F1 从 0.854 提高至 0.923，负类 F1 从 0.752 提高至 0.868。后者的增益说明，更强的分类结果并非单由多数类驱动。预训练词向量对照呈现出另一层收益：在当前 BiLSTM 架构和词表规则下，GloVe 将 macro-F1 从 0.824 提高至 0.860。结合资源测量，这些结果将三类表示的作用区分开来：稀疏特征提供快速参照，静态预训练改善序列模型，RoBERTa 进一步提高分类质量。
 
-### 6.3 c) 模型 (15%)
-自绘架构图 (不要截 BERT 论文的图) + 维度表 + 损失公式 (CE / 加权 CE) + 训练策略 (AdamW, lr, warmup, 早停指标) + 复现协议 (seed 列表、折数、mean±std) + 代码附录 + README (精确命令、requirements 版本、硬件、每个实验耗时)。至少 baseline + 主模型两个; RNN 一行满足题目的鼓励。
+### 结论草稿
 
-### 6.4 d) 超参数 (5%)
-表格 (超参 | 范围 | 选定 | 依据) + 验证曲线 (lr × epoch × max_len) + C × class_weight × 阈值交互表 + 原理 (小 lr 防破坏预训练权重; max_len 由**子词** p95 决定; batch 受内存限制; 早停防过拟合)。失分点: "用默认值"; 没证据; 偷看 test 预测分布调参。
-
-### 6.5 e) 提交 (15%)
-见第 7 节清单。报告写明生成文件的模型 / seed / 命令、test 预测正负比例 (与 train 先验 85/15 对比)、CV 结果作为预期表现, 声明 test 标签未知且 test 文本未参与任何训练或词表构建。
-
-### 6.6 f) 错例分析 (10%)
-1. 主分析放在 train 的 OOF 预测: 混淆矩阵 + 错误类型占比 (转折/混合、否定、标签噪声、短文本、反讽、领域词义、末尾截断)。
-2. **test 无偏子集**: 随机抽 200-300 条, 三人独立标注、多数投票、报告 kappa → 诚实的 test 准确率点估计和混淆矩阵, 也为 e) 提供预期。
-3. 有偏补充: 概率 0.4-0.6 的低置信样本 (实测 121 行)、TF-IDF 与 roberta 意见不一致的样本。
-4. 案例: 1 个 "难但做对" (否定/转折) + 1 个 "做错", 配词级归因 (LR 系数; Captum Integrated Gradients), 错因归到模型设计 (截断、负类欠学习、[CLS] 对长评论后半段不敏感)。现成材料: 标签对但 BoW 错的 "Looks great on the web, don't think many would buy it if they could examine it in-person..." (反讽+转折)、"This shoe isn't as comfortable as my other Keds shoes..." (比较级否定)、"...If you want any kind of foot comfort...skip it" (条件句, 结论在末尾)。
-5. 失分点: 只贴样本不解释; 声称 "测试准确率" 却没有标注依据; 选平凡样本; 不归因到模型设计。
-
-### 6.7 g) 特征格式 vs 资源与精度 (10%)
-从 `runs.csv` 生成 8-9 行对照表 (由便宜到贵): TF-IDF unigram + LR → uni+bi + LinearSVC → +char n-gram (维度翻倍无收益的例子) → GloVe 平均池化 + LR → TextCNN → BiLSTM → **roberta 冻结特征 + LR** → distilbert 微调 → roberta 微调。列: feature_dim、参数量、特征构建时间、训练时间、推理 1851 条时间、峰值内存、模型/依赖磁盘 (GloVe ~1 GB, roberta ~500 MB)、是否需要 GPU、acc/macro-F1/F1(neg)/AUC。**写明计时条件** (同一台机器、同 max_len、动态 padding、推理 batch、是否预热)。画训练时间 (log) vs macro-F1 散点图。结论形态: "贵 3-4 个数量级换 2-3 pt macro-F1"。
-
-### 6.8 h) 酒店评论、无标签 (10%)
-1. 诊断: 源域 apparel (有标签) → 目标域 hotel (无标签) = unsupervised domain adaptation; 酒店评论更长、多方面 (房间/服务/位置)。
-2. **先答现有模型会怎样**: TF-IDF 退化最重 (负面信号依赖 return/refund/size/shipping 等电商事务词, 到酒店域失效; 词表不匹配); GloVe 中等; 微调 PLM 退化最小但仍下降 (Blitzer 2007 跨域损失 5-15 pt; Hendrycks 2020); **label prior shift**: 模型和阈值都是按 85/15 调的, 酒店正负比例不同, 即使特征能迁移阈值也要在目标域重新校准 (单独写成小节); **没有标签就无法评估**, 必须先手标 200-300 条评估集并报告标注一致性。
-3. 按标注预算分层 (做成表): 零标签 — 词典 (VADER/SO-CAL)、NLI 零样本 (Yin 2019)、LLM 零样本/标注 (Zhang 2024; Gilardi 2023)、LOTClass、UDA (DANN; SCL→PBLM→PERL; DAPT/TAPT Gururangan 2020; **UDALM** Karouzos 2021 源域分类 + 目标域 MLM 多任务, 最值得推荐)、self-training/pseudo-labeling; 弱标签 — 关键词/表情远程监督、Snorkel、LLM 伪标签蒸馏到小模型; 少量标签 — active learning、SetFit、PET、UDA 一致性 (Xie 2020)。
-4. 推荐组合: DAPT 在酒店无标签文本 + LLM/词典伪标签启动 + self-training, 用小人工标注集做模型选择; 提 ABSA 扩展。
-5. 若做实验: 只用无标签酒店文本 + 自己手标的小评估集; 外部带标签集 (如 TripAdvisor) 只能当评估集, 写明来源与许可, 声明不参与 submission 的模型训练。
-
-### 6.9 i) 酒店评论、有评分但噪声 (10%)
-1. 噪声类型: symmetric / class-conditional (3 星边界) / instance-dependent (文本与评分不符, 如物流差评但夸产品); 本数据 1-2% 真实噪声样本可直接当例子。
-2. 现有模型会怎样: 过参数化 PLM + CE 先学干净模式再记忆噪声 (Arpit 2017 memorization), 准确率随噪声率下降, 少数类受害更重, 验证集含噪则模型选择失效, 校准变差 (Zhu 2022 "Is BERT robust to label noise": 对随机噪声较鲁棒, 对特征相关噪声脆弱, 早停最关键)。
-3. **醒目编号三种方法**: (1) 噪声鲁棒损失: GCE (Zhang & Sabuncu 2018)、Symmetric CE (Wang 2019)、label smoothing; (2) 样本选择/协同训练: Co-teaching (Han 2018)、DivideMix (Li 2020)、小损失准则 + 早停; (3) **利用评分的序数结构** (比通用方法更贴题): 只用 1/5 星做高置信标签、按评分极端程度加权、评分当软标签/序数回归、剔除 3 星边界; 另可提 confident learning (Northcutt 2021, cleanlab)、噪声转移矩阵损失修正 (Patrini 2017; Jindal 2019 文本版)、Meta-Weight-Net。
-4. 加分小实验 (便宜): 在 train 注入 10/20/30% 对称噪声, 比较 TF-IDF+LR 与 roberta 在 CE / label smoothing / 早停 / cleanlab 过滤下的 macro-F1 曲线, 一张图把 "会怎样" 变成证据; 结合第 1 节找到的真实标错样本。
-
----
-
-## 7. 合规与提交检查清单
-
-**合规红线**
-- test 文本不参与任何 fit: TF-IDF 词表、GloVe 词表统计、阈值、早停、TAPT 继续预训练、self-training 全部只用 train (PDF 第 4 条原话: "your algorithm should take only the inputs from the training set")。TAPT 若做只用 train 文本并声明。
-- 87 条 train/test 重叠: 不查表覆盖; 报告统一口径 "87 unique texts, appearing in 101 test rows and 136 train rows; 71 pos / 16 neg by text", 声明未做特殊处理, 并指出 test 真实表现会因此略乐观 (约 +0.3 pt)。
-- 不要用已在情感数据上微调好的模型 (如 siebert/sentiment-roberta-large) 冒充自己训练; 最多作为明确标注的 zero-shot 对照。
-- 不要手动删除可疑标签样本后训练 (会被质疑挑数据); 做成对照实验放 i)。
-- 综述不能是 LLM 生成的无来源文本; 每个论断有引用; 不引用不存在的论文 (录入前逐条在 ACL Anthology / DOI / arXiv 核对); 查阅 NTU 对 GenAI 使用声明的规定。
-
-**submission.csv**
-- 文件名精确 `submission.csv` (PDF 原话; 不是 submission_template.csv); 列名 `reviews,predictions`; UTF-8; 无 index 列。
-- 推荐做法: 读入课程给的模板, 断言 `reviews` 与 `test.json` 逐行相同, 只替换 `predictions` 为 int 0/1, `to_csv(index=False)`, **再用 `pd.read_csv` 读回**: `len(df) == 1851` 且 `df.reviews.equals(test_df.reviews)`。**评论含换行, `wc -l` 是 2781 行, 不要用行数工具检查。**
-- 正类比例 0.82-0.88 (train 0.854); 与 TF-IDF baseline 预测一致率 > 93%, 否则大概率错位。
-- 报告描述的模型 / 超参 / seed 必须与生成文件的代码一致; 提交前在全新 venv 里按 README 复跑一次。
-
-**报告**
-- 成员姓名、学号; 按题 a-i 的贡献表; 章节标题带题号; 结果表第一行放 "全预测 1 = 85.4%"。
-- 引用统一 IEEE 格式, 含 PDF 给的 5 条; 图表编号并在正文引用; 架构图自绘。
-- 提前一天上传 NTULearn 并下载回来核对; 确认上传格式 (zip 或 PDF + csv 分开) 与代码提交方式 (附录 / 可访问的仓库链接)。
-
----
-
-## 8. 文献清单 (★ = 建议纳入 "数十篇" 核心清单; ✔ = 2026-10-22 已在 arXiv / ACL Anthology 核实; 无标记为公认经典但录入前仍需核对; [未核实] 不要直接引用)
-
-**综述 / 教材 (a1)**: Pang & Lee 2008 (FnTIR); Bing Liu 2012 (Morgan & Claypool) / 2015, 2nd ed. 2020 (CUP); Zhang, Wang & Liu 2018 WIREs DMKD (arXiv 1801.07883 ✔); Wankhade et al. 2022 AI Review ✔; **Zhang, Deng, Liu, Pan & Bing 2024, Findings of NAACL, pp. 3881-3906 ✔** (引用用 2024, 不是 2023); Ramponi & Plank 2020 COLING (UDA 综述); Song et al. 2022 IEEE TNNLS (噪声标签综述); Jurafsky & Martin SLP 3rd ed. (NB/LR 章)。
-
-**经典基线 (7)**: ★ Pang, Lee & Vaithyanathan 2002 EMNLP; ★ Turney 2002 ACL; Hu & Liu 2004 KDD; ★ Wang & Manning 2012 ACL (NBSVM); Maas 2011 ACL (IMDb); ★ Socher 2013 EMNLP (SST); Zhang, Zhao & LeCun 2015 NeurIPS。
-
-**词向量 + 神经网络 (5)**: ★ Kim 2014 EMNLP (TextCNN); Tang, Qin & Liu 2015 EMNLP; ★ Yang 2016 NAACL (HAN); Joulin 2017 EACL (fastText); ★ Howard & Ruder 2018 ACL (ULMFiT)。
-
-**PLM 与微调 (14)**: Peters 2018 (ELMo); ★ Devlin 2019 NAACL (BERT); ★ Liu 2019 (RoBERTa, arXiv 1907.11692); Yang 2019 (XLNet); Lan 2020 ICLR (ALBERT); ★ Clark 2020 ICLR (ELECTRA); ★ Sanh 2019 (DistilBERT); ★ He 2021 ICLR (DeBERTa) / He, Gao & Chen 2023 ICLR (DeBERTaV3); Warner 2024 (ModernBERT, arXiv 2412.13663 ✔); ★ Sun, Qiu, Xu & Huang 2019 CCL (How to fine-tune BERT: head+tail); ★ Mosbach 2021 ICLR (微调稳定性); Zhang, Wu et al. 2021 ICLR (few-sample fine-tuning); Hu 2022 ICLR (LoRA); ★ Hendrycks 2020 ACL ✔ (预训练 Transformer 抗 OOD)。
-
-**情感专用 / 领域预训练 (5)**: Xu, Liu, Shu & Yu 2019 NAACL; ★ Gururangan 2020 ACL (DAPT/TAPT); ★ Tian 2020 ACL (SKEP); Yin, Meng & Chang 2020 ACL (SentiBERT); Ke 2020 EMNLP (SentiLARE)。
-
-**少样本 / LLM (11)**: Brown 2020 NeurIPS; Schick & Schütze 2021 EACL (PET); ★ Gao, Fisch & Chen 2021 ACL (LM-BFF); ★ Tunstall 2022 (SetFit, arXiv 2209.11055 ✔); Liu 2023 ACM CSUR (prompting 综述); ★ Wang et al. 2023 (Is ChatGPT a good sentiment analyzer, arXiv 2304.04339 ✔); ★ Zhang 2024 Findings NAACL ✔; Qin 2023 EMNLP; Zhong 2023 (arXiv 2302.10198); Kocoń 2023 Information Fusion; ★ Gilardi 2023 PNAS (LLM 标注); Sun 2023 Findings of EMNLP ✔ (CARP); Fei 2023 ACL (隐式情感 CoT)。
-
-**噪声标签 (13, 服务 i)**: Natarajan 2013 NeurIPS; Arpit 2017 ICML; ★ Han 2018 NeurIPS (Co-teaching); ★ Zhang & Sabuncu 2018 NeurIPS (GCE); ★ Wang 2019 ICCV (SCE); Müller 2019 NeurIPS (label smoothing); Li 2020 ICLR (DivideMix); ★ Northcutt 2021 JAIR (confident learning); Northcutt 2021 NeurIPS D&B (基准标签错误); ★ Jindal 2019 NAACL ✔ (文本噪声转移层); ★ Zhu 2022 ACL Insights workshop ✔ (Is BERT robust to label noise); Wu 2023 Findings ACL ✔ (NoisywikiHow); Swayamdipta 2020 EMNLP (dataset cartography)。
-
-**领域自适应 / 自训练 / 零样本 (14, 服务 h)**: ★ Blitzer 2007 ACL (SCL); Pan 2010 WWW (SFA); Glorot 2011 ICML; ★ Ganin 2016 JMLR (DANN); Ziser & Reichart 2018 NAACL (PBLM); Ben-David 2020 TACL (PERL); Han & Eisenstein 2019 EMNLP (AdaptaBERT); ★ Karouzos 2021 NAACL ✔ (UDALM); Ben-David 2022 TACL ✔ (PADA); Lee 2013 (pseudo-label); ★ Xie 2020 NeurIPS (UDA 一致性); Du 2021 NAACL (self-training); ★ Meng 2020 EMNLP (LOTClass); Yin, Hay & Roth 2019 EMNLP (NLI 零样本); Hutto & Gilbert 2014 ICWSM (VADER); Taboada 2011 CL (SO-CAL)。
-
-**类别不平衡 (4)**: ★ Lin 2017 ICCV (focal loss); Cui 2019 CVPR; Li 2020 ACL (Dice loss, 已核实 ACL 2020 main pp. 465-476); Johnson & Khoshgoftaar 2019 J. Big Data。
-
-需格外小心的条目: ABSA 综述的 TKDE 卷期; ModernBERT 引 arXiv 即可; Blitzer 数据的域名 — JHU 数据页不列 unprocessed 版本的域名, 报告里写 "推断为 apparel/shoes" 而不是事实。实际引用控制在 40-50 条, 不要为了 "数十篇" 硬塞。
-
----
-
-## 9. 本次实测脚本位置 (临时目录, 可复制进项目当 `notebooks/01_eda` 的素材; 路径写死了旧的 `Project/train.json`, 复用时改成 `data/raw/`)
-
-`/private/tmp/claude-501/-Users-saber812-Library-CloudStorage-OneDrive-NanyangTechnologicalUniversity-EE6483-Project/4bbb100c-9485-48b7-8c44-b0337b07f1dc/scratchpad/` 下:
-`01_data_stats.py` (统计/重复/重叠/词表/判别词), `02_baseline_cv.py` (TF-IDF 配置对比), `03_noise_and_extras.py` (OOF 噪声候选、分桶错误率), `04_truncation_check.py` (末尾截断), `baseline.py`, `oof.py`, `bench_plm.py` + `plm_bench.log` (PLM 速度/内存/子词长度), `bench_lstm.py`。
+本项目通过统一的数据划分和多维评价，比较了三类文本表示在不平衡商品评论分类中的实用价值。TF-IDF 以低计算成本建立有效基线，GloVe 初始化改善了 BiLSTM，而 RoBERTa 在当前完整五折实验中取得最高的 macro-F1 和负类 F1。资源测量进一步说明了这些收益所需的训练与推理投入，为不同计算预算下的模型选择提供了依据。

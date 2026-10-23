@@ -1,53 +1,34 @@
 # EE6483 商品评论情感分类
 
-NTU EE6483 Artificial Intelligence and Data Mining 课程项目：根据英文商品评论预测情感，`0` 表示负面，`1` 表示正面。
+NTU EE6483 Artificial Intelligence and Data Mining 课程项目：根据英文商品评论预测情感，`0` 表示负面，`1` 表示正面。项目比较 TF-IDF、预训练词向量和预训练语言模型三类表示，重点考察**负面评论识别能力与计算成本的权衡**。
 
-项目建议、评分要点、模型路线、分工与时间线见 [docs/project_advice.md](docs/project_advice.md)。
+在去重后的 7,185 条训练评论和共享的 5 折划分上，RoBERTa-base 达到 **0.962 accuracy、0.923 macro-F1 和 0.868 负类 F1**。相较于带否定标记的 TF-IDF + Logistic Regression，macro-F1 提高 **6.83 个百分点**，负类 F1 提高 **11.60 个百分点**。TF-IDF 则以约 1.14 秒的五折向量化与拟合时间取得 0.854 macro-F1，为低成本方案提供参照。
 
-## 目录
+完整指标与方法口径见 [实验结果](docs/experiment_results.md)，报告组织与后续安排见 [项目建议](docs/project_advice.md)。
 
-```text
-.
-├── data/
-│   ├── raw/train.json                # 7,401 条带标签评论 (去重后 7,185)
-│   ├── raw/test.json                 # 1,851 条无标签评论
-│   └── folds.csv                     # 共享的 5 折划分 (sha1(text) → fold), 由 python -m src.data 生成
-├── docs/
-│   ├── assignment/EE6483-Project1.pdf
-│   ├── examples/tfidf_features_example.html
-│   └── project_advice.md             # 项目建议文档
-├── notebooks/tfidf_features_example.ipynb
-├── src/
-│   ├── data.py                       # 读数据、去重、5 折协议
-│   ├── metrics.py                    # 指标 + OOF 阈值规则
-│   ├── features/negation.py          # 词袋模型用的 NOT_ 否定范围标记
-│   ├── utils/resources.py            # 计时 / 峰值内存 (报告 g 用)
-│   ├── train_tfidf.py                # TF-IDF + LogisticRegression 基线 (5 折)
-│   ├── train_plm.py                  # 预训练模型微调 (distilbert / bert / roberta), 5 折, MPS fp16
-│   ├── train_rnn.py                  # GloVe 词向量 + BiLSTM / TextCNN, 5 折
-│   ├── utils/results.py              # 神经模型共用的统计与写盘 (oof / test_probs / summary / runs.csv)
-│   ├── make_submission.py            # 测试概率 → submission.csv (+ 自检)
-│   └── check_submission.py           # 提交文件格式校验
-├── results/
-│   ├── runs.csv                      # 每次实验一行 (指标 + 资源)
-│   ├── oof/*.npy                     # out-of-fold 概率 (与去重后的训练集顺序一致); PLM 另有 *_last.npy
-│   ├── test_probs/*.npy              # 测试集概率 (5 折模型平均)
-│   └── summary/*.json                # 每次运行的完整摘要 (配置、各折指标、阈值); PLM 另有 *_curves.csv; plm_sweep.json 记录扫参决策
-├── scripts/plm_sweep.py              # distilbert 扫参 → 类权重消融 → roberta-base 5 折 的顺序驱动
-├── scripts/rnn_runs.sh               # GloVe BiLSTM / TextCNN 5 折 + 随机初始化消融 + 两折扫参
-├── tests/                            # 回归测试 (test_pipeline.py, test_train_plm.py, test_train_rnn.py, test_results.py)
-├── submissions/
-│   ├── submission_template.csv       # 课程给的模板 (全 0)
-│   └── submission.csv                # 当前提交文件
-├── environment.yml / requirements.txt / requirements-lock.txt
-└── README.md
-```
+## 核心结果
 
-HTML 文件是课程示例的原始导出归档；运行时使用 `notebooks/` 中的 notebook。
+以下为共享五折划分、`seed=42`、阈值 0.5 下的已保存结果；accuracy 和 macro-F1 为折均值 ± 总体标准差，F1(neg) 为折均值。
 
-## 环境
+| 模型 | accuracy | macro-F1 | F1(neg) |
+|---|---|---|---|
+| TF-IDF + NOT_ + LR | 0.927 ± 0.001 | 0.854 ± 0.001 | 0.752 |
+| GloVe + BiLSTM | 0.930 ± 0.007 | 0.860 ± 0.013 | 0.761 |
+| **RoBERTa-base** | **0.962 ± 0.003** | **0.923 ± 0.006** | **0.868** |
 
-使用 conda 环境 `ee6483`（Python 3.13；torch 在 Apple Silicon 上自动使用 MPS）。环境、HuggingFace 缓存、GloVe、checkpoint 都放在 OneDrive 目录之外。
+神经模型在留出折选择 checkpoint，并记录末轮预测作对照。完整五折表、两折扫参、资源计时、阈值分析和评估口径统一维护在 [实验结果](docs/experiment_results.md)。
+
+## 文档导航
+
+| 文档 | 内容 |
+|---|---|
+| [实验结果与评估口径](docs/experiment_results.md) | 完整指标、消融与扫参、资源统计、数据与模型配置 |
+| [报告主线与项目计划](docs/project_advice.md) | 报告草稿、a–i 各节证据、分工和后续里程碑 |
+| [课程说明](docs/assignment/EE6483-Project1.pdf) | 原始任务与评分要求 |
+
+## 环境与运行
+
+使用 conda 环境 `ee6483`（Python 3.13）；`requirements.txt` 固定项目已记录的依赖版本，`requirements-lock.txt` 保存完整环境快照。将环境、Hugging Face 缓存和 GloVe 放在本地非同步目录中。
 
 ```bash
 conda create -y -n ee6483 python=3.13
@@ -57,105 +38,109 @@ python -m ipykernel install --user --name ee6483 --display-name "Python (ee6483)
 python -c "import torch, transformers, sklearn; print(torch.__version__, torch.backends.mps.is_available(), transformers.__version__, sklearn.__version__)"
 ```
 
-`requirements.txt` 固定了已验证的版本；`requirements-lock.txt` 是完整的 `pip freeze`。本机原有的 conda 环境 `torch`（Python 3.10）的 scipy 在 macOS 27 上无法加载，请勿使用。
-
-## 运行（在项目根目录）
+以下命令均在项目根目录运行。先建立共享划分并复现基线：
 
 ```bash
-python -m src.data                                   # 打印数据统计, 生成/校验 data/folds.csv
-python -m src.train_tfidf --name tfidf_lr_neg        # 1-2gram + NOT_ 否定标记 + LR(C=4, balanced), 5 折
-python -m src.make_submission --summary results/summary/tfidf_lr_neg_seed42.json   # 写 submissions/submission.csv 并自检
-python -m src.check_submission submissions/submission.csv                           # 单独校验任意提交文件
-python -m src.make_submission --summary results/summary/a.json results/summary/b.json  # 集成: 平均概率, 阈值在平均 OOF 上重选
-python -m tests.test_pipeline                                                       # 回归测试 (否定标记 / 折协议 / 指标 / 校验器)
+python -m src.data
+python -m src.train_tfidf --name tfidf_lr_neg
+python -m src.make_submission --summary results/summary/tfidf_lr_neg_seed42.json
+python -m src.check_submission submissions/submission.csv
 ```
 
-预训练模型微调（Apple Silicon 上自动用 MPS + fp16；首次运行会从 HuggingFace 下载模型到 `~/.cache/huggingface`）：
+微调预训练语言模型（Apple Silicon 自动使用 MPS + fp16；首次运行下载模型至 Hugging Face 缓存）：
 
 ```bash
-python -m src.train_plm --model distilbert-base-uncased --folds 0 --limit 256 --epochs 1 --no-save   # 冒烟测试 (约 20 秒)
-python -m src.train_plm --model roberta-base --name roberta_base_len256 --lr 3e-5 --max-len 256 --batch-size 16   # 5 折, 约 50 分钟
-python -m src.train_plm --model roberta-base --name roberta_base_len256 --lr 3e-5 --max-len 256 --batch-size 16 --resume   # 中断后续跑
-python -m scripts.plm_sweep                                                         # distilbert lr 扫参 (folds 0,1) → 类权重消融 → roberta 5 折
-python -m tests.test_train_plm                                                      # 微调脚本的 CPU 单元测试
+# 小规模验证训练流程
+python -m src.train_plm --model distilbert-base-uncased --folds 0 --limit 256 --epochs 1 --no-save
+# 完整五折 RoBERTa；已记录的累计训练计时约 57 分钟
+python -m src.train_plm --model roberta-base --name roberta_base_len256 --lr 3e-5 --max-len 256 --batch-size 16
+# 按相同配置恢复中断的运行
+python -m src.train_plm --model roberta-base --name roberta_base_len256 --lr 3e-5 --max-len 256 --batch-size 16 --resume
+# DistilBERT 两折学习率扫描、类权重消融及 RoBERTa 五折实验
+python -m scripts.plm_sweep
 ```
 
-`--folds 0,1` 或 `--limit` 的运行是部分运行：必须加 `--no-save`（不写任何文件）或 `--allow-partial`（run_id 带 `_f0-1` / `_n64` 后缀，不会覆盖完整运行）。
-
-GloVe 词向量 + BiLSTM / TextCNN（首次运行用 gensim 下载 `glove-wiki-gigaword-300`，约 376 MB，存到 `~/gensim-data`；每次运行加载约 35 秒）：
+训练词向量模型（首次通过 gensim 下载 `glove-wiki-gigaword-300`，约 376 MB，默认存至 `~/gensim-data`）：
 
 ```bash
-python -m src.train_rnn --arch bilstm  --name glove_bilstm                 # BiLSTM, 5 折, 约 4 分钟
-python -m src.train_rnn --arch textcnn --name glove_textcnn                # TextCNN, 5 折, 约 2 分钟
-python -m src.train_rnn --arch bilstm  --name rand_bilstm --no-pretrained  # 消融: 随机初始化 (词表规则不变)
-bash scripts/rnn_runs.sh                                                   # 以上三组 + 两折扫参 (lr / 隐层 / 冻结词向量 / TextCNN lr)
-python -m tests.test_train_rnn && python -m tests.test_results             # CPU 单元测试
+python -m src.train_rnn --arch bilstm --name glove_bilstm
+python -m src.train_rnn --arch textcnn --name glove_textcnn
+python -m src.train_rnn --arch bilstm --name rand_bilstm --no-pretrained
+bash scripts/rnn_runs.sh
 ```
 
-消融示例：`--no-negation`、`--class-weight none`、`--C 1`、`--ngram-max 1`、`--min-df 1`（`--help` 查看全部参数）。
+`--folds 0,1` 或 `--limit` 表示部分运行，需搭配 `--no-save` 或 `--allow-partial`；后者使用带 `_f0-1` / `_n64` 等后缀的 `run_id` 保存产物。TF-IDF 消融参数包括 `--no-negation`、`--class-weight none`、`--C 1`、`--ngram-max 1` 和 `--min-df 1`。
 
-## 评估协议（所有模型共用）
+运行现有回归测试：
 
-1. 训练集按文本去重：7,401 → 7,185 行（重复文本之间标签无冲突）。
-2. `StratifiedKFold(n_splits=5, shuffle=True, random_state=42)`，划分保存在 `data/folds.csv`，以 `sha1(text)` 为键，所有模型使用同一组折。
-3. 所有可学习的预处理（TF-IDF 词表/IDF、词向量词表、tokenizer 统计）只在训练折上拟合；测试集文本不参与任何训练、阈值选择或早停。
-4. 指标：accuracy、macro-F1、F1(neg)、precision/recall(neg)、ROC-AUC、混淆矩阵；报 5 折 mean ± std（总体标准差，ddof=0）。全预测正类的 accuracy 是 0.854，单看 accuracy 没有意义。
-5. 决策阈值在全部 OOF 概率上选：macro-F1 最大且 accuracy 不低于最优值 0.003。在同一 OOF 上评估该阈值是样本内估计（summary 里的 `oof_at_threshold`）；报告阈值效果时用嵌套估计 `oof_at_threshold_nested`（在其余 4 折的 OOF 上选阈值、在第 5 折上打分、汇总）。
-6. 最终预测 = 5 个折模型测试概率的平均 + OOF 阈值；不做全量重训。多模型集成时阈值在成员的平均 OOF 上重新选（`make_submission.py` 自动处理）。
-7. `results/runs.csv` 每个 run_id 只保留一行（重跑同名实验会替换而不是追加）。
-8. 预训练模型微调（`train_plm.py`）每半个 epoch 在留出折上评估一次，保留 macro-F1 最高的 checkpoint，用它产生该折的 OOF 概率和测试概率。这个 checkpoint 是在同一个留出折上挑出来的，所以 PLM 行的 CV 指标比 TF-IDF 行（没有任何选择）略偏乐观；每次运行同时保存最后一个 checkpoint 的无选择估计（`results/oof/<run_id>_last.npy`，summary 里的 `cv_mean_std_last`，runs.csv 里的 `acc_mean_last` / `macro_f1_mean_last`），报告里两者都要给。
-9. 类权重用 `sqrt`（按频率平方根的倒数，正负约 1 : 2.4），比完全反频率温和；超长文本用 head+tail 截断（前 75% + 后 25% 的 token 预算）。
-10. 词向量模型（`train_rnn.py`）：分词按 GloVe 6B 风格（小写、标点分开、"don't" → "do" "n't"），连字符词与小数会被拆开（约 0.3% 的 token）；词表每折只用训练折构建（GloVe 中有的词出现 1 次即收录，其余需 ≥ 2 次），验证/测试集未见词映射到 `<unk>`；BiLSTM 不用 pack_padded_sequence（MPS 上慢 12 倍），反向方向在每个样本自身长度内翻转后单独跑一条 LSTM，输出与 padding 无关；每个 epoch 在留出折评估一次、patience 3 早停、保留最优 epoch。这里的 `*_last` 是早停时刻的 checkpoint，停止时刻本身也依赖留出折，所以不是无选择估计，只能说明"选最优 epoch"额外带来多少。
+```bash
+python -m tests.test_pipeline
+python -m tests.test_train_plm
+python -m tests.test_train_rnn
+python -m tests.test_results
+```
 
-`results/runs.csv` 列口径：`train_s_total` = 产生 5 个折模型所需的全部时间（TF-IDF：向量化 + 拟合；PLM：分词 + 训练步 + 用于选 checkpoint 的留出折评估；词向量：分词 + 每折词表与嵌入矩阵构建 + 训练步 + 留出折评估，不含约 35 秒的 GloVe 加载，该时间只记在 summary 的 glove_load_s），`infer_test_s` = 用一个模型对 1851 条测试评论做特征构建 + 预测的时间，`feature_dim` = TF-IDF 词表大小 / PLM 隐层维度 / 词向量维度（GloVe 300），`n_params` = 可训练参数量（词向量模型：词向量矩阵整段冻结时不计入；折均值），`device` = 设备/精度（有 fp32 回退的折时标 mixed），`device_mem_mb` = MPS/CUDA 峰值分配（CPU 运行为空），`partial` = 是否只跑了部分折或子样本，`selection` = checkpoint 选择方式（none / best_val_macro_f1），`*_insample` / `*_nested` = 阈值效果的样本内 / 嵌套估计。
+## 提交文件
 
-## 当前结果（折均值 ± 总体标准差, 去重后, 阈值 0.5）
-
-| run_id | 配置 | accuracy | macro-F1 | F1(neg) | ROC-AUC | 最后 checkpoint acc / macro-F1 | 嵌套阈值 acc / macro-F1 |
-|---|---|---|---|---|---|---|---|
-| 全预测 1 | — | 0.854 | 0.461 | 0 | — | — | — |
-| tfidf_lr_notebook | TF-IDF unigram, C=1, 无类权重, 无否定标记 (示例 notebook 设置) | 0.886 ± 0.003 | 0.663 ± 0.010 | 0.389 | 0.939 | — | 0.914 / 0.820 |
-| tfidf_lr_noneg | TF-IDF 1-2gram, C=4, balanced | 0.922 ± 0.002 | 0.846 ± 0.005 | 0.737 | 0.950 | — | 0.922 / 0.842 |
-| tfidf_lr_neg | TF-IDF 1-2gram + NOT_ 否定标记, C=4, balanced | 0.927 ± 0.001 | 0.854 ± 0.001 | 0.752 | 0.954 | — | 0.925 / 0.851 |
-| rand_bilstm | 随机初始化词向量 + BiLSTM (h 256, 同词表规则) — 消融 | 0.910 ± 0.007 | 0.824 ± 0.010 | 0.701 | 0.932 | 0.903 / 0.802 | 0.909 / 0.822 |
-| glove_textcnn | GloVe 300d + TextCNN (128 × {3,4,5}), lr 1e-3 | 0.922 ± 0.007 | 0.842 ± 0.010 | 0.730 | 0.945 | 0.924 / 0.829 | 0.922 / 0.841 |
-| glove_bilstm | GloVe 300d + BiLSTM (h 256, mean+max 池化), lr 1e-3, 第 1 个 epoch 后解冻词向量 | 0.930 ± 0.007 | 0.860 ± 0.013 | 0.761 | 0.953 | 0.925 / 0.843 | 0.930 / 0.859 |
-| glove_bilstm_lr5e-4_f0-1 | GloVe + BiLSTM, lr 5e-4 (折 0,1) | 0.921 ± 0.002 | 0.845 ± 0.005 | 0.737 | 0.945 | 0.919 / 0.835 | 0.920 / 0.844 |
-| glove_bilstm_lr2e-3_f0-1 | GloVe + BiLSTM, lr 2e-3 (折 0,1) | 0.925 ± 0.013 | 0.848 ± 0.016 | 0.739 | 0.950 | 0.921 / 0.826 | 0.918 / 0.838 |
-| glove_bilstm_h128_f0-1 | GloVe + BiLSTM, h 128 (折 0,1) | 0.921 ± 0.012 | 0.837 ± 0.024 | 0.720 | 0.945 | 0.913 / 0.815 | 0.919 / 0.835 |
-| glove_bilstm_frozen_f0-1 | GloVe + BiLSTM, 词向量全程冻结 (折 0,1) | 0.926 ± 0.010 | 0.851 ± 0.020 | 0.746 | 0.947 | 0.919 / 0.834 | 0.924 / 0.848 |
-| glove_textcnn_lr5e-4_f0-1 | GloVe + TextCNN, lr 5e-4 (折 0,1) | 0.922 ± 0.004 | 0.844 ± 0.007 | 0.733 | 0.940 | 0.922 / 0.839 | 0.921 / 0.845 |
-| distilbert_len128_lr2e-05_f0-1 | distilbert-base-uncased, len 128, bs 32, lr 2e-5, sqrt 类权重 (折 0,1) | 0.942 ± 0.001 | 0.884 ± 0.002 | 0.801 | 0.970 | 0.940 / 0.878 | 0.943 / 0.885 |
-| distilbert_len128_lr3e-05_f0-1 | distilbert, lr 3e-5 (折 0,1) | 0.945 ± 0.000 | 0.887 ± 0.001 | 0.807 | 0.972 | 0.945 / 0.887 | 0.945 / 0.887 |
-| distilbert_len128_lr5e-05_f0-1 | distilbert, lr 5e-5 (折 0,1) | 0.946 ± 0.001 | 0.893 ± 0.003 | 0.818 | 0.970 | 0.946 / 0.891 | 0.949 / 0.895 |
-| distilbert_len128_lr5e-05_cwnone_f0-1 | distilbert, lr 5e-5, 无类权重 (折 0,1) | 0.948 ± 0.001 | 0.892 ± 0.002 | 0.815 | 0.969 | 0.943 / 0.882 | 0.942 / 0.884 |
-| roberta_base_len256 | **roberta-base, len 256 head+tail, bs 16, lr 3e-5, sqrt 类权重 (5 折)** | **0.962 ± 0.003** | **0.923 ± 0.006** | 0.868 | 0.980 | 0.961 / 0.921 | 0.962 / 0.922 |
-
-- 词向量行：GloVe 300d + BiLSTM 5 折 acc 0.930 / macro-F1 0.860，比 TF-IDF 高不到 1 pt 且折间方差更大（早停时机不同）；TextCNN 0.922 / 0.842，略低于 TF-IDF；随机初始化（同词表规则）0.910 / 0.824，说明预训练词向量贡献约 3.6 pt macro-F1。每折词表约 1.1 万词（98% 有 GloVe 向量），验证集未登录词率约 1.8%。两折扫参里 lr 5e-4 / 2e-3 与隐层 128 都不如默认；词向量全程冻结反而略好于第 1 个 epoch 后解冻（7k 条数据上解冻 300 维词向量容易过拟合）。词向量行的 `*_last` 是早停时刻的 checkpoint，不是无选择估计（见协议第 10 条）。
-- distilbert 行是扫参用的部分运行（只跑折 0、1，run_id 带 `_f0-1`），用来选学习率和检验类权重，不与 5 折行直接比较。lr 2e-5 / 3e-5 / 5e-5 的 macro-F1 差距在折间方差量级内；去掉类权重后 accuracy 略高、macro-F1 持平，最终保留 sqrt 类权重。扫参决策记录在 `results/summary/plm_sweep.json`。
-- roberta-base 的学习率按规则 min(最优 distilbert lr, 3e-5) = 3e-5（roberta-base 在 5e-5 下微调不稳定）。5 折 OOF：acc 0.9617，macro-F1 0.9227，F1(neg) 0.8679，AUC 0.9779；最后 checkpoint 口径 0.9612 / 0.9210，嵌套阈值 0.9616 / 0.9224，三者几乎一致，说明在留出折上选 checkpoint 带来的乐观偏差很小（≤ 0.2 pt）。
-- 资源（Apple M5, MPS fp16）：roberta-base 1.25 亿参数，每折训练约 11 分钟（3 epoch），5 折共 55 分钟训练步 + 1.4 分钟评估，MPS 峰值 9.4 GB（padding 对齐 64 并定期清缓存后约 5.3 GB），对 1851 条测试评论推理 3.6 秒；GloVe + BiLSTM 460 万参数（其中词向量 346 万）、5 折训练约 4 分钟（另加 35 秒 GloVe 加载，376 MB 词向量文件）、推理 0.36 秒；TextCNN 5 折约 2 分钟、推理 0.15 秒；TF-IDF + LR 3.9 万维特征、训练 1.2 秒、推理 0.04 秒、内存 0.3 GB。
-- 内存注意：16 GB 机器上 PyTorch 默认允许 MPS 占到推荐值的 1.7 倍（约 21 GB），roberta len 256 会把机器拖进换页；`train_plm.py` 已把高/低水位设为 0.85 / 0.3 并把 batch padding 对齐到 64 的倍数。
-
-当前 `submissions/submission.csv` 仍由 `tfidf_lr_neg_seed42` 在 OOF 阈值 0.48 下生成（测试正类比例 0.854）。roberta 的测试概率已在 `results/test_probs/roberta_base_len256_seed42.npy`，与当前提交的预测一致率 0.943（约 105 条测试评论的预测不同）；切换到 roberta 提交：
+当前 `submissions/submission.csv` 的预测与 `tfidf_lr_neg_seed42` 在 OOF 阈值 0.48 下的输出一致，预测正类比例为 85.36%。RoBERTa 的五折测试概率已保存，可用以下命令生成对应的提交文件并与当前文件比较：
 
 ```bash
 python -m src.make_submission --summary results/summary/roberta_base_len256_seed42.json --compare submissions/submission.csv
 ```
 
-## 数据观察
+该命令校验通过后会更新 `submissions/submission.csv`；可添加 `--out submissions/roberta_submission.csv` 保存单独版本。集成示例：
 
-- 正面评论占 85.38%；训练集内 216 行重复；87 条文本同时出现在训练集与测试集（test 101 行，train 136 行；按文本 71 正 / 16 负）。对重叠样本不做任何特殊处理，预测全部由模型生成。
-- 约 76% 的评论末尾字符被截断（如 "quick shippin"），训练集和测试集同样受影响，不做修复。
-- 约 1-2% 的训练标签与文本明显不符（标签来自星级），可用于错例分析与噪声标签讨论。
-- 训练集与测试集同分布（长度、词频一致，token 级 OOV 仅 1.8%）。
+```bash
+python -m src.make_submission --summary results/summary/tfidf_lr_neg_seed42.json results/summary/roberta_base_len256_seed42.json --out submissions/ensemble_submission.csv
+```
 
-## 后续实验
+提交文件使用 `reviews,predictions` 两列，1,851 条记录的文本及顺序与 `test.json` 一致，预测为整数 0/1。生成脚本先写临时文件、读回校验，再更新目标文件。报告应记录最终使用的模型、seed、阈值和生成命令。
 
-1. roberta-base 多 seed（`--seed 2024 --seed 7`）取均值 ± 标准差；bert-base-uncased 一组对照；roberta 冻结特征 + LR（同一 PLM"特征提取 vs 微调"）。
-2. 错例分析（f）：用 OOF 概率挑转折/否定/标签噪声样本，TF-IDF 与 roberta 对照；测试集随机抽 200-300 条三人标注。
-3. 可选：deberta-v3-base（MPS 上 loss 会 NaN，放 Colab）、Qwen 冻结表示 + 分类器、Qwen + LoRA，作为对照表的补充行。
+课程要求三人一组提交报告与 `submission.csv`，报告注明成员分工并引用使用的资料。截止时间为 **2026 年 11 月 13 日 23:59**，详细要求见 [课程说明](docs/assignment/EE6483-Project1.pdf)。
 
-## 课程提交
+## 报告完善与后续实验
 
-按课程说明，三人一组提交报告及 `submission.csv`，报告注明成员分工并引用使用的资料。截止时间：**2026 年 11 月 13 日 23:59**；详细要求见 [课程说明](docs/assignment/EE6483-Project1.pdf)。
+当前已有三类特征的完整五折结果、否定标记与词向量初始化消融，以及资源记录。后续工作优先补强核心结论：
+
+1. **多 seed 稳定性。** 分别以 `--seed 2024`、`--seed 7` 运行 RoBERTa，报告不同训练 seed 的均值与标准差。
+2. **机制与错例。** 对照 TF-IDF 与 RoBERTa 的 OOF 预测，分析否定、转折和混合情感；按课程 f) 要求补充 1–2 条测试集案例，注明人工判断依据；用固定标注规则复核疑似标签分歧。
+3. **表示方式对照。** 补充冻结 RoBERTa 特征 + LR，检验同一预训练模型下任务微调的作用。其他模型扩展按报告论证需要安排。
+
+具体章节证据、人员分工与里程碑见 [项目建议](docs/project_advice.md)。
+
+## 目录与产物
+
+```text
+.
+├── data/
+│   ├── raw/train.json                # 原始带标签评论
+│   ├── raw/test.json                 # 无标签测试评论
+│   └── folds.csv                     # 文本哈希对应的共享五折划分
+├── docs/
+│   ├── assignment/EE6483-Project1.pdf # 课程说明
+│   ├── examples/tfidf_features_example.html
+│   ├── experiment_results.md         # 详细结果、资源统计与评估协议
+│   └── project_advice.md             # 报告主线、章节证据与后续计划
+├── notebooks/tfidf_features_example.ipynb
+├── src/
+│   ├── data.py / metrics.py          # 数据协议、指标与阈值规则
+│   ├── features/negation.py          # NOT_ 否定范围标记
+│   ├── train_tfidf.py                # TF-IDF + LR
+│   ├── train_plm.py                  # 预训练语言模型微调
+│   ├── train_rnn.py                  # GloVe + BiLSTM / TextCNN
+│   ├── utils/                       # 资源测量与结果保存
+│   └── make_submission.py / check_submission.py
+├── scripts/                         # PLM 与词向量模型实验驱动
+├── results/
+│   ├── runs.csv                     # 每个 run_id 一行汇总
+│   ├── oof/                         # 去重训练集顺序下的折外概率
+│   ├── test_probs/                  # 各折平均后的测试概率
+│   └── summary/                     # 配置、指标、阈值与训练曲线
+├── tests/                           # 现有回归测试
+├── submissions/                     # 课程模板与预测提交文件
+├── environment.yml
+├── requirements.txt / requirements-lock.txt
+└── README.md
+```
+
+HTML 是课程示例的原始导出归档；交互运行使用 `notebooks/` 中的 notebook。神经模型另存 `*_last.npy` 供 checkpoint 对照，summary 中的 `artifacts` 给出每次实验的具体产物路径。
