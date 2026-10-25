@@ -110,13 +110,14 @@ python -m tests.test_results
 
 ## 提交文件
 
-当前 `submissions/submission.csv` 的预测与 `tfidf_lr_neg_seed42` 在 OOF 阈值 0.48 下的输出一致，预测正类比例为 85.36%。RoBERTa 的五折测试概率已保存，可用以下命令生成对应的提交文件并与当前文件比较：
+当前 `submissions/submission.csv` 的预测与 `qwen2.5_1.5b_lora16_len256_seed42`（Qwen2.5-1.5B + LoRA，Colab L4）五折测试概率在 OOF 阈值 0.45 下的输出一致，预测正类比例为 86.17%（训练先验 85.40%）；与此前 TF-IDF 版本的预测一致率为 94.4%，与 RoBERTa-base 为 97.5%，与 DeBERTa-v3-base 为 98.1%。该模型的 OOF 指标为 accuracy 0.9706、macro-F1 0.9404（嵌套阈值估计 0.9676 / 0.9357）。其他模型的五折测试概率也已保存，可用以下命令生成对应的提交文件并与当前文件比较：
 
 ```bash
-python -m src.make_submission --summary results/summary/roberta_base_len256_seed42.json --compare submissions/submission.csv
+python -m src.make_submission --summary results/summary/qwen2.5_1.5b_lora16_len256_seed42.json --compare submissions/submission.csv   # 重新生成当前版本
+python -m src.make_submission --summary results/summary/roberta_base_len256_seed42.json --out submissions/roberta_submission.csv --compare submissions/submission.csv
 ```
 
-该命令校验通过后会更新 `submissions/submission.csv`；可添加 `--out submissions/roberta_submission.csv` 保存单独版本。集成示例：
+不加 `--out` 时，命令校验通过后会更新 `submissions/submission.csv`。集成示例：
 
 ```bash
 python -m src.make_submission --summary results/summary/tfidf_lr_neg_seed42.json results/summary/roberta_base_len256_seed42.json --out submissions/ensemble_submission.csv
