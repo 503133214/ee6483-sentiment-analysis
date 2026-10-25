@@ -18,8 +18,10 @@ NTU EE6483 Artificial Intelligence and Data Mining 课程项目：根据英文�
 | DeBERTa-v3-base (Colab L4, bf16) | 0.967 ± 0.002 | 0.934 ± 0.004 | 0.887 |
 | Qwen2.5-0.5B + LoRA r=16 (Colab L4) | 0.967 ± 0.002 | 0.932 ± 0.004 | 0.884 |
 | **Qwen2.5-1.5B + LoRA r=16 (Colab L4)** | **0.970 ± 0.002** | **0.940 ± 0.005** | **0.897** |
+| Qwen3.5-2B-Base + LoRA r=16 (Colab A100) | 0.971 ± 0.003 | 0.942 ± 0.005 | 0.902 |
+| Qwen3.8-27B 零样本, 4-bit, 阈值 0.5 (Colab A100) | 0.968 ± 0.003 | 0.940 ± 0.005 | 0.898 |
 
-RoBERTa-base 另在 Colab L4 上以 seed 2024、7 重复，三个 seed 的 macro-F1 为 0.923, 0.923, 0.924（均值 0.923，标准差 0.001）。同一模型只抽特征再接逻辑回归时明显更差：RoBERTa-base 冻结 mean 池化 + LR macro-F1 0.848，Qwen2.5-1.5B 冻结末 token + LR 0.827。
+RoBERTa-base 另在 Colab L4 上以 seed 2024、7 重复，三个 seed 的 macro-F1 为 0.923, 0.923, 0.924（均值 0.923，标准差 0.001）。Qwen3.8 系列没有小模型（最小的 Qwen3.8-27B 是 27B 多模态后训练模型，bf16 权重 55.6 GB），因此用 4-bit 量化做零样本分类：不训练、不看任何标签，仅靠提示词读取 "positive/negative" 的 logits，阈值 0.5 下 macro-F1 0.940；若用训练标签校准阈值（0.17），acc 0.976 / macro-F1 0.953（嵌套估计 0.975 / 0.951），是全部实验中最高的。同架构（qwen3_5）最小的 Base 模型 Qwen3.5-2B-Base + LoRA 的结果与 Qwen2.5-1.5B 持平。同一模型只抽特征再接逻辑回归时明显更差：RoBERTa-base 冻结 mean 池化 + LR macro-F1 0.848，Qwen2.5-1.5B 冻结末 token + LR 0.827。
 
 神经模型在留出折选择 checkpoint，并记录末轮预测作对照。完整五折表、两折扫参、资源计时、阈值分析和评估口径统一维护在 [实验结果](docs/experiment_results.md)。
 

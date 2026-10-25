@@ -14,7 +14,7 @@ if cur and alive:
     if logs:
         latest = logs[-1][1]
         lines = open(f"{ROOT}/logs/{latest}", errors="replace").read().splitlines()
-        keep = [l for l in lines if l.startswith(("model ", "frozen ", "tokenised", "fold ", "== ", "features", "saved", "Traceback", "RuntimeError", "Error"))]
+        keep = [l for l in lines if l.startswith(("model ", "frozen ", "zero-shot ", "prompts ", "  scored", "scored ", "tokenised", "fold ", "== ", "features", "saved", "resuming", "Traceback", "RuntimeError", "Error"))]
         print(f"--- {latest}: {len(lines)} lines; key lines ---")
         print("\n".join(keep[-12:]))
         print("--- tail ---"); print("\n".join(lines[-3:]))

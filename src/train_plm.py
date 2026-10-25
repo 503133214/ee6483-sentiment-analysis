@@ -157,10 +157,31 @@ def free_device(device: torch.device) -> None:
 
 TORCH_DTYPES = {"fp32": torch.float32, "bf16": torch.bfloat16, "fp16": torch.float16}
 LORA_TARGETS = {
+    # qwen3_5 (Qwen3.5 / Qwen3.8): hybrid stack - full-attention layers use q/k/v/o_proj, Gated-DeltaNet linear-attention layers use in_proj_*/out_proj
+    "qwen3_5": ["q_proj", "k_proj", "v_proj", "o_proj", "in_proj_qkv", "in_proj_z", "out_proj"],
     "qwen": ["q_proj", "k_proj", "v_proj", "o_proj"], "llama": ["q_proj", "k_proj", "v_proj", "o_proj"], "mistral": ["q_proj", "k_proj", "v_proj", "o_proj"],
     "gemma": ["q_proj", "k_proj", "v_proj", "o_proj"], "distilbert": ["q_lin", "k_lin", "v_lin", "out_lin"], "deberta": ["query_proj", "key_proj", "value_proj", "dense"],
     "bert": ["query", "key", "value", "dense"], "roberta": ["query", "key", "value", "dense"],
 }
+
+
+def set_pad_token_id(model, pad_id: int) -> None:
+    """Write pad_token_id into every config object the model may consult: the outer config, the text
+    sub-config of multimodal composites (Qwen3.5/3.8: the classification head reads it from there) and the
+    inner base model's config."""
+    cfgs = [model.config, getattr(model.config, "text_config", None), getattr(getattr(model, "model", None), "config", None)]
+    get_text = getattr(model.config, "get_text_config", None)
+    if callable(get_text):
+        try:
+            cfgs.append(get_text())
+        except TypeError:
+            pass
+    inner = getattr(model, "model", None)
+    lm = getattr(inner, "language_model", None)
+    cfgs.append(getattr(lm, "config", None))
+    for c in cfgs:
+        if c is not None:
+            c.pad_token_id = pad_id
 
 
 def load_model(args, tokenizer):
@@ -173,7 +194,7 @@ def load_model(args, tokenizer):
         model = AutoModelForSequenceClassification.from_pretrained(args.model, torch_dtype=dtype, **kwargs)
     if tokenizer.pad_token_id is None:  # decoder-only models (Qwen/Llama) often have no pad token; sequence classification needs one
         tokenizer.pad_token = tokenizer.eos_token
-    model.config.pad_token_id = tokenizer.pad_token_id
+    set_pad_token_id(model, tokenizer.pad_token_id)
     if getattr(model.config, "use_cache", None) is not None:
         model.config.use_cache = False
     if args.gradient_checkpointing:
@@ -184,7 +205,7 @@ def load_model(args, tokenizer):
         from peft import LoraConfig, get_peft_model
         if args.lora_target == "auto":
             mt = model.config.model_type
-            targets = next((v for k, v in LORA_TARGETS.items() if k in mt), ["q_proj", "k_proj", "v_proj", "o_proj"])
+            targets = next((v for k, v in sorted(LORA_TARGETS.items(), key=lambda kv: -len(kv[0])) if k in mt), ["q_proj", "k_proj", "v_proj", "o_proj"])  # most specific key first
         else:
             targets = args.lora_target.split(",")
         cfg = LoraConfig(task_type="SEQ_CLS", r=args.lora_r, lora_alpha=args.lora_alpha, lora_dropout=args.lora_dropout, target_modules=targets)

@@ -2,7 +2,7 @@
 
 本页汇总截至 **2026-10-23** 已保存在项目中的实验结果，作为报告结果表、消融分析和资源对照的依据。所有数字来自 [runs.csv](../results/runs.csv)、[summary JSON](../results/summary/) 或原始数据统计；未完成实验的安排见 [项目建议](project_advice.md)，复现与提交命令见 [README](../README.md)。
 
-当前共 14 个完整五折运行（其中 7 个在 Google Colab 的 L4 GPU 上完成）和 9 个两折运行；除 RoBERTa-base 另有 seed 2024、7 两次重复外，训练 seed 均为 42。核心结论是：RoBERTa 提升负类识别，TF-IDF 提供低计算成本参照，GloVe 初始化改善 BiLSTM 的分类表现。
+当前共 16 个完整五折运行（其中 7 个在 Google Colab 的 L4 GPU、2 个在 A100 上完成）和 9 个两折运行；除 RoBERTa-base 另有 seed 2024、7 两次重复外，训练 seed 均为 42。核心结论是：RoBERTa 提升负类识别，TF-IDF 提供低计算成本参照，GloVe 初始化改善 BiLSTM 的分类表现。
 
 ## 主要结果
 
@@ -23,6 +23,8 @@
 | DeBERTa-v3-base (`deberta_v3_base_len256`) | 0.967 ± 0.002 | 0.934 ± 0.004 | 0.887 | 0.985 | 更强的编码器，需 bf16（Colab L4） |
 | Qwen2.5-0.5B + LoRA r=16 (`qwen2.5_0.5b_lora16_len256`) | 0.967 ± 0.002 | 0.932 ± 0.004 | 0.884 | 0.981 | 解码器 LLM 的参数高效微调（可训练参数 0.44%） |
 | **Qwen2.5-1.5B + LoRA r=16 (`qwen2.5_1.5b_lora16_len256`)** | **0.970 ± 0.002** | **0.940 ± 0.005** | **0.897** | **0.984** | **当前完整实验中的最高分类指标** |
+| Qwen3.5-2B-Base + LoRA r=16 (`qwen3.5_2b_base_lora16_len256`) | 0.971 ± 0.003 | 0.942 ± 0.005 | 0.902 | 0.981 | 最新架构（qwen3_5）的最小 Base 模型微调 |
+| Qwen3.8-27B 零样本, 4-bit, 阈值 0.5 (`qwen3.8_27b_zeroshot_4bit`) | 0.968 ± 0.003 | 0.940 ± 0.005 | 0.898 | 0.988 | 不训练的 LLM 对照；阈值经训练标签校准后 acc 0.976 / macro-F1 0.953 |
 
 这组结果支持三个结论：
 
@@ -33,6 +35,10 @@
 - **更大的预训练模型继续提升负类识别，但边际收益递减。** 在同一划分上，DeBERTa-v3-base 与 Qwen2.5-0.5B + LoRA 的 macro-F1 分别为 0.934 和 0.932，Qwen2.5-1.5B + LoRA 为 0.940（负类 F1 0.897），比 RoBERTa-base 高 1.7 个百分点，而可训练参数只有 436 万（LoRA 权重 + 分类头）。
 - **微调而非特征提取是收益的来源。** 同一个 RoBERTa-base 冻结后接逻辑回归的 macro-F1 为 0.848，比全参数微调低 7.5 个百分点；Qwen2.5-1.5B 的冻结末 token 表示（0.827）甚至低于 TF-IDF 基线。
 - **RoBERTa-base 结果对随机种子与硬件稳定。** seed 42（本机 MPS，fp16）与 seed 2024、7（Colab L4，bf16）的 macro-F1 为 0.923, 0.923, 0.924，均值 0.923、标准差 0.001；accuracy 均值 0.962、标准差 0.0004。
+
+- **不训练的 27B LLM 零样本分类已与微调的小模型持平。** Qwen3.8-27B（4-bit，thinking 关闭，只读取标签词 logits）在阈值 0.5 下 acc 0.968、macro-F1 0.940、负类召回 0.961、负类精确率 0.843（略偏向判负）；仅用训练标签把阈值校准到 0.17 后 acc 0.976、macro-F1 0.953，嵌套估计 0.975 / 0.951，高于所有微调模型；AUC 0.988。代价是单条推理开销最大（见计算成本）。
+- **零样本 LLM 揭示了标签噪声。** 有 92 条训练评论（1.28%）LLM 以 ≥ 95% 置信度给出与标签相反的类别，其中 57 条上 TF-IDF、RoBERTa 与 Qwen2.5-1.5B LoRA 的 OOF 预测全部与 LLM 一致而非与标签一致；名单在 `results/analysis/label_noise_candidates.csv`（`python -m scripts.label_noise_candidates` 重新生成），可直接用于错例分析与噪声标注讨论。
+- **同架构最小 Base 模型 Qwen3.5-2B 的 LoRA 微调与 Qwen2.5-1.5B 相当**（macro-F1 0.942 对 0.940），说明在这个 7k 条数据集上更新的预训练并未带来额外收益。
 
 DistilBERT 学习率、类权重及 GloVe 超参数扫描使用折 0、1，作为配置选择的补充证据；明细保存在 [runs.csv](../results/runs.csv)，PLM 选择规则见 [plm_sweep.json](../results/summary/plm_sweep.json)。两折结果单独分析，主表统一使用完整五折结果。
 
@@ -67,7 +73,7 @@ DistilBERT 学习率、类权重及 GloVe 超参数扫描使用折 0、1，作�
 | GloVe + BiLSTM | MPS / fp32 | 215.1 s | 0.364 s | 1,330 MB | 4,779 MB |
 | RoBERTa-base | MPS / fp16 | 3,399.9 s（56.7 min） | 3.558 s | 800 MB | 9,350 MB |
 
-Colab L4（24 GB，bf16）上的运行与上表不在同一硬件，耗时不可直接与 MPS 比较；表中可训练参数为 `n_params`（LoRA 行只含 LoRA 权重与分类头），显存为 `torch.cuda.max_memory_allocated` 的最大值。整条队列约 2.5 小时，消耗约 4.4 个 Colab 计算单元。
+Colab L4（24 GB，bf16）上的运行与上表不在同一硬件，耗时不可直接与 MPS 比较；表中可训练参数为 `n_params`（LoRA 行只含 LoRA 权重与分类头），显存为 `torch.cuda.max_memory_allocated` 的最大值。L4 队列约 2.5 小时、约 4.4 个计算单元；A100 上的 Qwen3.8 零样本（含 55.6 GB 下载与量化）与 Qwen3.5-2B 微调约 1.2 小时。Qwen3.5-2B 的显存偏高是因为 VM 没有线性注意力的 fla / causal-conv1d kernel，回退实现更吃内存。
 
 | 模型 | 设备 / 精度 | 训练计时（5 折） | 推理计时（单模型） | 可训练参数 | GPU 峰值显存 |
 |---|---|---|---|---|---|
@@ -77,6 +83,8 @@ Colab L4（24 GB，bf16）上的运行与上表不在同一硬件，耗时不可
 | DeBERTa-v3-base | Colab L4 / bf16 | 1,291.3 s（21.5 min） | 3.04 s | 184,423,682 | 6,994 MB |
 | Qwen2.5-0.5B + LoRA | Colab L4 / bf16 | 1,395.4 s（23.3 min） | 5.41 s | 2,164,480 | 6,562 MB |
 | Qwen2.5-1.5B + LoRA（梯度检查点） | Colab L4 / bf16 | 4,820.7 s（80.3 min） | 14.06 s | 4,361,216 | 4,148 MB |
+| Qwen3.5-2B-Base + LoRA | Colab A100 40GB / bf16 | 2,640.8 s（44.0 min） | 8.82 s | 6,197,248 | 27,591 MB |
+| Qwen3.8-27B 零样本 | Colab A100 40GB / 4-bit nf4 | 0（无训练；加载 1.6 min） | 121.8 s（66 s / 1000 条） | 0 | 23,320 MB |
 
 TF-IDF 训练计时包含向量化与拟合，另有约 0.16 秒文本预处理；神经模型包含训练文本分词、训练步和留出折评估，GloVe 模型另含每折词表与嵌入矩阵构建。GloVe 加载约 35 秒，单独记录在 `glove_load_s`。推理计时包含对应的特征构建和预测，TF-IDF 的否定预处理单独计时。RSS 为进程峰值；MPS 数值取各折结束时驱动分配量的最大值，两者分列展示。恢复运行的 `wall_s` 只记录该次进程耗时，五折成本使用累计训练计时。
 

@@ -1,0 +1,418 @@
+{
+  "run_id": "qwen3.8_27b_zeroshot_4bit_seed42",
+  "name": "qwen3.8_27b_zeroshot_4bit",
+  "model": "Qwen/Qwen3.8-27B zero-shot",
+  "feature_format": "llm_zero_shot",
+  "config": {
+    "model": "Qwen/Qwen3.8-27B",
+    "name": "qwen3.8_27b_zeroshot_4bit",
+    "seed": 42,
+    "quant": "4bit",
+    "load_dtype": "bf16",
+    "max_len": 256,
+    "head_frac": 0.75,
+    "batch_size": 16,
+    "labels": "negative,positive",
+    "enable_thinking": false,
+    "device": "auto",
+    "folds": "all",
+    "limit": null,
+    "acc_slack": 0.003,
+    "scores_cache": "results/cache/qwen3.8_27b_zeroshot_scores.npz",
+    "no_save": false,
+    "allow_partial": false,
+    "partial": false
+  },
+  "protocol": {
+    "dedup": true,
+    "n_train": 7185,
+    "n_splits": 5,
+    "folds_run": [
+      0,
+      1,
+      2,
+      3,
+      4
+    ],
+    "partial": false,
+    "fold_seed": 42,
+    "std_ddof": 0,
+    "threshold_rule": "max macro-F1 s.t. acc >= best-acc - 0.003; chosen on all training-set scores (calibration only; 0.5 is the pure zero-shot point)",
+    "model_selection": "none (no training; every training review is scored once by the frozen LLM, so OOF == all rows; *_last identical)",
+    "prompt": {
+      "system": "You are a sentiment classifier for online product reviews.",
+      "user": "Review:\n\"\"\"\n{review}\n\"\"\"\n\nIs the overall sentiment of this review positive or negative? Answer with exactly one word: positive or negative.",
+      "thinking": false,
+      "labels": "negative,positive",
+      "label_token_ids": {
+        "pos": [
+          6572,
+          29492,
+          34317,
+          42451
+        ],
+        "neg": [
+          7968,
+          37212,
+          40823,
+          49146
+        ]
+      }
+    }
+  },
+  "tokenization": {
+    "review_token_budget": 256,
+    "truncation": "head_tail (decoded back to text)"
+  },
+  "folds": [
+    {
+      "threshold": 0.5,
+      "accuracy": 0.9693806541405706,
+      "macro_f1": 0.9418244317512661,
+      "f1_neg": 0.9017857142857143,
+      "precision_neg": 0.8451882845188284,
+      "recall_neg": 0.9665071770334929,
+      "f1_pos": 0.9818631492168178,
+      "roc_auc": 0.9940347240621543,
+      "pr_auc_neg": 0.9631772644600096,
+      "tn": 202,
+      "fp": 7,
+      "fn": 37,
+      "tp": 1191,
+      "pred_pos_ratio": 0.8336812804453723,
+      "fold": 0,
+      "n_val": 1437
+    },
+    {
+      "threshold": 0.5,
+      "accuracy": 0.9679888656924147,
+      "macro_f1": 0.9389576761400995,
+      "f1_neg": 0.8968609865470852,
+      "precision_neg": 0.847457627118644,
+      "recall_neg": 0.9523809523809523,
+      "f1_pos": 0.9810543657331137,
+      "roc_auc": 0.9872550161058719,
+      "pr_auc_neg": 0.9537964425214706,
+      "tn": 200,
+      "fp": 10,
+      "fn": 36,
+      "tp": 1191,
+      "pred_pos_ratio": 0.8357689631176062,
+      "fold": 1,
+      "n_val": 1437
+    },
+    {
+      "threshold": 0.5,
+      "accuracy": 0.9686847599164927,
+      "macro_f1": 0.9410374455304169,
+      "f1_neg": 0.9006622516556292,
+      "precision_neg": 0.8395061728395061,
+      "recall_neg": 0.9714285714285714,
+      "f1_pos": 0.9814126394052045,
+      "roc_auc": 0.9905615710016688,
+      "pr_auc_neg": 0.9449066382941524,
+      "tn": 204,
+      "fp": 6,
+      "fn": 39,
+      "tp": 1188,
+      "pred_pos_ratio": 0.8308977035490606,
+      "fold": 2,
+      "n_val": 1437
+    },
+    {
+      "threshold": 0.5,
+      "accuracy": 0.9631176061238692,
+      "macro_f1": 0.9308033017003665,
+      "f1_neg": 0.8835164835164835,
+      "precision_neg": 0.8204081632653061,
+      "recall_neg": 0.9571428571428572,
+      "f1_pos": 0.9780901198842497,
+      "roc_auc": 0.9858462374354795,
+      "pr_auc_neg": 0.9395794653366962,
+      "tn": 201,
+      "fp": 9,
+      "fn": 44,
+      "tp": 1183,
+      "pred_pos_ratio": 0.8295059151009047,
+      "fold": 3,
+      "n_val": 1437
+    },
+    {
+      "threshold": 0.5,
+      "accuracy": 0.9714683368128044,
+      "macro_f1": 0.9452918612392787,
+      "f1_neg": 0.90744920993228,
+      "precision_neg": 0.8626609442060086,
+      "recall_neg": 0.9571428571428572,
+      "f1_pos": 0.9831345125462773,
+      "roc_auc": 0.9839639849419801,
+      "pr_auc_neg": 0.9637125838969972,
+      "tn": 201,
+      "fp": 9,
+      "fn": 32,
+      "tp": 1195,
+      "pred_pos_ratio": 0.83785664578984,
+      "fold": 4,
+      "n_val": 1437
+    }
+  ],
+  "folds_last": [
+    {
+      "threshold": 0.5,
+      "accuracy": 0.9693806541405706,
+      "macro_f1": 0.9418244317512661,
+      "f1_neg": 0.9017857142857143,
+      "precision_neg": 0.8451882845188284,
+      "recall_neg": 0.9665071770334929,
+      "f1_pos": 0.9818631492168178,
+      "roc_auc": 0.9940347240621543,
+      "pr_auc_neg": 0.9631772644600096,
+      "tn": 202,
+      "fp": 7,
+      "fn": 37,
+      "tp": 1191,
+      "pred_pos_ratio": 0.8336812804453723,
+      "fold": 0,
+      "n_val": 1437
+    },
+    {
+      "threshold": 0.5,
+      "accuracy": 0.9679888656924147,
+      "macro_f1": 0.9389576761400995,
+      "f1_neg": 0.8968609865470852,
+      "precision_neg": 0.847457627118644,
+      "recall_neg": 0.9523809523809523,
+      "f1_pos": 0.9810543657331137,
+      "roc_auc": 0.9872550161058719,
+      "pr_auc_neg": 0.9537964425214706,
+      "tn": 200,
+      "fp": 10,
+      "fn": 36,
+      "tp": 1191,
+      "pred_pos_ratio": 0.8357689631176062,
+      "fold": 1,
+      "n_val": 1437
+    },
+    {
+      "threshold": 0.5,
+      "accuracy": 0.9686847599164927,
+      "macro_f1": 0.9410374455304169,
+      "f1_neg": 0.9006622516556292,
+      "precision_neg": 0.8395061728395061,
+      "recall_neg": 0.9714285714285714,
+      "f1_pos": 0.9814126394052045,
+      "roc_auc": 0.9905615710016688,
+      "pr_auc_neg": 0.9449066382941524,
+      "tn": 204,
+      "fp": 6,
+      "fn": 39,
+      "tp": 1188,
+      "pred_pos_ratio": 0.8308977035490606,
+      "fold": 2,
+      "n_val": 1437
+    },
+    {
+      "threshold": 0.5,
+      "accuracy": 0.9631176061238692,
+      "macro_f1": 0.9308033017003665,
+      "f1_neg": 0.8835164835164835,
+      "precision_neg": 0.8204081632653061,
+      "recall_neg": 0.9571428571428572,
+      "f1_pos": 0.9780901198842497,
+      "roc_auc": 0.9858462374354795,
+      "pr_auc_neg": 0.9395794653366962,
+      "tn": 201,
+      "fp": 9,
+      "fn": 44,
+      "tp": 1183,
+      "pred_pos_ratio": 0.8295059151009047,
+      "fold": 3,
+      "n_val": 1437
+    },
+    {
+      "threshold": 0.5,
+      "accuracy": 0.9714683368128044,
+      "macro_f1": 0.9452918612392787,
+      "f1_neg": 0.90744920993228,
+      "precision_neg": 0.8626609442060086,
+      "recall_neg": 0.9571428571428572,
+      "f1_pos": 0.9831345125462773,
+      "roc_auc": 0.9839639849419801,
+      "pr_auc_neg": 0.9637125838969972,
+      "tn": 201,
+      "fp": 9,
+      "fn": 32,
+      "tp": 1195,
+      "pred_pos_ratio": 0.83785664578984,
+      "fold": 4,
+      "n_val": 1437
+    }
+  ],
+  "zero_shot_at_0.5": {
+    "threshold": 0.5,
+    "accuracy": 0.9681280445372303,
+    "macro_f1": 0.9395544738594357,
+    "f1_neg": 0.8979955456570156,
+    "precision_neg": 0.842809364548495,
+    "recall_neg": 0.9609151572926596,
+    "f1_pos": 0.9811134020618557,
+    "roc_auc": 0.9884072712199984,
+    "pr_auc_neg": 0.9531039732131086,
+    "tn": 1008,
+    "fp": 41,
+    "fn": 188,
+    "tp": 5948,
+    "pred_pos_ratio": 0.8335421016005568
+  },
+  "test_pred_pos_ratio": 0.8449486763911399,
+  "test_pred_pos_ratio_at_0.5": 0.8363047001620746,
+  "resources": {
+    "feature_dim": null,
+    "n_params": 0,
+    "n_params_total_loaded": 14953501936,
+    "prompt_build_s": 3.8998368769998706,
+    "load_s": 95.10070013799987,
+    "score_s_total": 594.5998406960002,
+    "score_s_per_1000_texts": 65.80343522532097,
+    "train_s_total": 0.0,
+    "infer_test_s": 121.80215860206911,
+    "wall_s": 703.5728081540001,
+    "peak_rss_mb": 54731.576,
+    "device_mem_mb_max": 23320.050176,
+    "machine": "Linux x86_64 x86_64",
+    "device": "cuda",
+    "precision": "4bit"
+  },
+  "cv_mean_std": {
+    "accuracy": {
+      "mean": 0.9681280445372303,
+      "std": 0.0027626211887653534
+    },
+    "macro_f1": {
+      "mean": 0.9395829432722855,
+      "std": 0.004841583561028963
+    },
+    "f1_neg": {
+      "mean": 0.8980549291874385,
+      "std": 0.008021986040517796
+    },
+    "precision_neg": {
+      "mean": 0.8430442383896587,
+      "std": 0.013666015409290813
+    },
+    "recall_neg": {
+      "mean": 0.9609204830257463,
+      "std": 0.006972740782121505
+    },
+    "roc_auc": {
+      "mean": 0.988332306709431,
+      "std": 0.0035752066651502557
+    }
+  },
+  "cv_mean_std_last": {
+    "accuracy": {
+      "mean": 0.9681280445372303,
+      "std": 0.0027626211887653534
+    },
+    "macro_f1": {
+      "mean": 0.9395829432722855,
+      "std": 0.004841583561028963
+    },
+    "f1_neg": {
+      "mean": 0.8980549291874385,
+      "std": 0.008021986040517796
+    },
+    "precision_neg": {
+      "mean": 0.8430442383896587,
+      "std": 0.013666015409290813
+    },
+    "recall_neg": {
+      "mean": 0.9609204830257463,
+      "std": 0.006972740782121505
+    },
+    "roc_auc": {
+      "mean": 0.988332306709431,
+      "std": 0.0035752066651502557
+    }
+  },
+  "oof_at_0.5": {
+    "threshold": 0.5,
+    "accuracy": 0.9681280445372303,
+    "macro_f1": 0.9395544738594357,
+    "f1_neg": 0.8979955456570156,
+    "precision_neg": 0.842809364548495,
+    "recall_neg": 0.9609151572926596,
+    "f1_pos": 0.9811134020618557,
+    "roc_auc": 0.9884072712199984,
+    "pr_auc_neg": 0.9531039732131086,
+    "tn": 1008,
+    "fp": 41,
+    "fn": 188,
+    "tp": 5948,
+    "pred_pos_ratio": 0.8335421016005568
+  },
+  "oof_at_0.5_last": {
+    "threshold": 0.5,
+    "accuracy": 0.9681280445372303,
+    "macro_f1": 0.9395544738594357,
+    "f1_neg": 0.8979955456570156,
+    "precision_neg": 0.842809364548495,
+    "recall_neg": 0.9609151572926596,
+    "f1_pos": 0.9811134020618557,
+    "roc_auc": 0.9884072712199984,
+    "pr_auc_neg": 0.9531039732131086,
+    "tn": 1008,
+    "fp": 41,
+    "fn": 188,
+    "tp": 5948,
+    "pred_pos_ratio": 0.8335421016005568
+  },
+  "threshold": 0.17,
+  "oof_at_threshold": {
+    "threshold": 0.17,
+    "accuracy": 0.97633959638135,
+    "macro_f1": 0.9534378918772537,
+    "f1_neg": 0.9207828518173345,
+    "precision_neg": 0.9006381039197813,
+    "recall_neg": 0.9418493803622497,
+    "f1_pos": 0.9860929319371727,
+    "roc_auc": 0.9884072712199984,
+    "pr_auc_neg": 0.9531039732131086,
+    "tn": 988,
+    "fp": 61,
+    "fn": 109,
+    "tp": 6027,
+    "pred_pos_ratio": 0.8473208072373,
+    "note": "in-sample: threshold selected on these same OOF probabilities; see oof_at_threshold_nested"
+  },
+  "oof_at_threshold_nested": {
+    "fold_thresholds": [
+      0.07,
+      0.17,
+      0.17,
+      0.13,
+      0.2
+    ],
+    "note": "threshold chosen on the other folds' OOF, scored on the held-out fold, pooled (nested w.r.t. the threshold only; checkpoint selection bias remains, see *_last)",
+    "accuracy": 0.9752261656228254,
+    "macro_f1": 0.9509447206112492,
+    "f1_neg": 0.9164319248826291,
+    "precision_neg": 0.902867715078631,
+    "recall_neg": 0.9304099142040038,
+    "f1_pos": 0.9854575163398693,
+    "roc_auc": 0.9884072712199984,
+    "pr_auc_neg": 0.9531039732131086,
+    "tn": 976,
+    "fp": 73,
+    "fn": 105,
+    "tp": 6031,
+    "pred_pos_ratio": 0.8495476687543494
+  },
+  "artifacts": {
+    "oof": "results/oof/qwen3.8_27b_zeroshot_4bit_seed42.npy",
+    "oof_last": "results/oof/qwen3.8_27b_zeroshot_4bit_seed42_last.npy",
+    "test_probs": "results/test_probs/qwen3.8_27b_zeroshot_4bit_seed42.npy",
+    "thresholds": "results/summary/qwen3.8_27b_zeroshot_4bit_seed42_thresholds.csv",
+    "curves": "results/summary/qwen3.8_27b_zeroshot_4bit_seed42_curves.csv"
+  }
+}

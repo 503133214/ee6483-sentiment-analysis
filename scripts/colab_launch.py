@@ -10,8 +10,9 @@ if os.path.exists(tar):
     print("extracted project tarball")
 os.makedirs(f"{ROOT}/logs", exist_ok=True)
 log = open(f"{ROOT}/logs/chain.log", "ab")
-proc = subprocess.Popen(["bash", "scripts/colab_chain.sh"], cwd=ROOT, stdout=log, stderr=subprocess.STDOUT, env={**os.environ, "PY": sys.executable, "PYTHONUNBUFFERED": "1"},
+chain = os.environ.get("CHAIN", "scripts/colab_chain.sh")  # pass another queue with: colab exec --env CHAIN=scripts/colab_chain_qwen3.sh
+proc = subprocess.Popen(["bash", chain], cwd=ROOT, stdout=log, stderr=subprocess.STDOUT, env={**os.environ, "PY": sys.executable, "PYTHONUNBUFFERED": "1"},
                         start_new_session=True)
 open(f"{ROOT}/logs/chain.pid", "w").write(str(proc.pid))
 time.sleep(3)
-print("chain started, pid", proc.pid, "alive:", proc.poll() is None)
+print("chain", chain, "started, pid", proc.pid, "alive:", proc.poll() is None)
