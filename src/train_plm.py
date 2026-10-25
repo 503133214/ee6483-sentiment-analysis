@@ -83,7 +83,15 @@ def parse_args(argv=None):
     p.add_argument("--class-weight", choices=["none", "sqrt", "balanced"], default="sqrt", help="CE class weights: none, sqrt inverse frequency (mild), inverse frequency")
     p.add_argument("--label-smoothing", type=float, default=0.0)
     p.add_argument("--eval-every", type=float, default=0.5, help="evaluate on the held-out fold every this fraction of an epoch")
-    p.add_argument("--precision", choices=["fp16", "fp32"], default="fp16", help="fp16 = autocast + GradScaler on MPS/CUDA (falls back to fp32 on non-finite loss)")
+    p.add_argument("--precision", choices=["fp16", "bf16", "fp32"], default="fp16", help="fp16 = autocast + GradScaler on MPS/CUDA; bf16 = autocast bf16 (Ampere+/L4/A100, no scaler; use for deberta-v3 and Qwen); fp32")
+    p.add_argument("--load-dtype", choices=["fp32", "bf16", "fp16"], default="fp32", help="dtype of the loaded base weights (bf16 saves memory for large models under --lora)")
+    p.add_argument("--lora", action="store_true", help="parameter-efficient fine-tuning with LoRA (peft); the classification head stays fully trainable")
+    p.add_argument("--lora-r", type=int, default=16)
+    p.add_argument("--lora-alpha", type=int, default=32)
+    p.add_argument("--lora-dropout", type=float, default=0.05)
+    p.add_argument("--lora-target", default="auto", help="comma-separated target module names, or auto (q_proj,k_proj,v_proj,o_proj for Qwen/Llama; query,key,value,dense for BERT-like)")
+    p.add_argument("--gradient-checkpointing", action="store_true")
+    p.add_argument("--eval-batch-size", type=int, default=None, help="default: --batch-size")
     p.add_argument("--device", default="auto", help="auto | mps | cuda | cpu")
     p.add_argument("--folds", default="all", help="comma-separated fold ids to run (e.g. 0,1) or all")
     p.add_argument("--limit", type=int, default=None, help="use only the first N train rows per fold and N test rows (smoke tests)")
@@ -94,7 +102,7 @@ def parse_args(argv=None):
     args = p.parse_args(argv)
     if args.name is None:
         tag = args.model.split("/")[-1].replace("-", "_")
-        args.name = f"{tag}_len{args.max_len}_bs{args.batch_size}_ep{args.epochs}_lr{args.lr:g}_cw{args.class_weight}" + ("" if args.truncation == "head_tail" else "_head")
+        args.name = f"{tag}_len{args.max_len}_bs{args.batch_size}_ep{args.epochs}_lr{args.lr:g}_cw{args.class_weight}" + ("" if args.truncation == "head_tail" else "_head") + (f"_lora{args.lora_r}" if args.lora else "")
     folds = list(range(N_SPLITS)) if args.folds == "all" else [int(x) for x in args.folds.split(",")]
     if len(set(folds)) != len(folds) or not set(folds) <= set(range(N_SPLITS)):
         p.error(f"--folds must be unique ids in 0..{N_SPLITS - 1}, got {folds}")
@@ -145,6 +153,43 @@ def free_device(device: torch.device) -> None:
         torch.mps.empty_cache()
     elif device.type == "cuda":
         torch.cuda.empty_cache()
+
+
+TORCH_DTYPES = {"fp32": torch.float32, "bf16": torch.bfloat16, "fp16": torch.float16}
+LORA_TARGETS = {
+    "qwen": ["q_proj", "k_proj", "v_proj", "o_proj"], "llama": ["q_proj", "k_proj", "v_proj", "o_proj"], "mistral": ["q_proj", "k_proj", "v_proj", "o_proj"],
+    "gemma": ["q_proj", "k_proj", "v_proj", "o_proj"], "distilbert": ["q_lin", "k_lin", "v_lin", "out_lin"], "deberta": ["query_proj", "key_proj", "value_proj", "dense"],
+    "bert": ["query", "key", "value", "dense"], "roberta": ["query", "key", "value", "dense"],
+}
+
+
+def load_model(args, tokenizer):
+    """AutoModelForSequenceClassification with the requested weight dtype, pad token wired for decoder models, optional LoRA / grad checkpointing."""
+    kwargs = {"num_labels": 2}
+    dtype = TORCH_DTYPES[args.load_dtype]
+    try:
+        model = AutoModelForSequenceClassification.from_pretrained(args.model, dtype=dtype, **kwargs)
+    except TypeError:  # transformers < 4.56 spells it torch_dtype
+        model = AutoModelForSequenceClassification.from_pretrained(args.model, torch_dtype=dtype, **kwargs)
+    if tokenizer.pad_token_id is None:  # decoder-only models (Qwen/Llama) often have no pad token; sequence classification needs one
+        tokenizer.pad_token = tokenizer.eos_token
+    model.config.pad_token_id = tokenizer.pad_token_id
+    if getattr(model.config, "use_cache", None) is not None:
+        model.config.use_cache = False
+    if args.gradient_checkpointing:
+        model.gradient_checkpointing_enable()
+        if hasattr(model, "enable_input_require_grads"):
+            model.enable_input_require_grads()
+    if args.lora:
+        from peft import LoraConfig, get_peft_model
+        if args.lora_target == "auto":
+            mt = model.config.model_type
+            targets = next((v for k, v in LORA_TARGETS.items() if k in mt), ["q_proj", "k_proj", "v_proj", "o_proj"])
+        else:
+            targets = args.lora_target.split(",")
+        cfg = LoraConfig(task_type="SEQ_CLS", r=args.lora_r, lora_alpha=args.lora_alpha, lora_dropout=args.lora_dropout, target_modules=targets)
+        model = get_peft_model(model, cfg)
+    return model
 
 
 def special_affixes(tokenizer) -> tuple[list[int], list[int]]:
@@ -204,7 +249,7 @@ def make_batches(indices, encoded, labels, batch_size, pad_id, shuffle, rng):
 
 
 @torch.no_grad()
-def predict(model, indices, encoded, batch_size, pad_id, device, use_amp):
+def predict(model, indices, encoded, batch_size, pad_id, device, use_amp, amp_dtype=torch.float16):
     """Positive-class probabilities for `indices`, returned in the order of `indices`."""
     was_training = model.training
     model.eval()
@@ -212,7 +257,7 @@ def predict(model, indices, encoded, batch_size, pad_id, device, use_amp):
     pos = {i: r for r, i in enumerate(indices)}
     for b, ids, mask, _ in make_batches(indices, encoded, None, batch_size, pad_id, shuffle=False, rng=None):
         ids, mask = ids.to(device), mask.to(device)
-        with torch.autocast(device_type=device.type, dtype=torch.float16, enabled=use_amp):
+        with torch.autocast(device_type=device.type, dtype=amp_dtype, enabled=use_amp):
             logits = model(input_ids=ids, attention_mask=mask).logits
         p = torch.softmax(logits.float(), dim=-1)[:, 1].cpu().numpy()
         for i, v in zip(b, p):
@@ -261,20 +306,24 @@ def train_fold(k, args, df, encoded_train, encoded_test, tokenizer, device, use_
     y_all = df[LABEL_COL].to_numpy()
     tr_idx, va_idx, te_idx = fold_indices(k, args, df, len(encoded_test))
 
-    model = AutoModelForSequenceClassification.from_pretrained(args.model, num_labels=2).to(device)
+    model = load_model(args, tokenizer).to(device)
     model.train()
+    amp_dtype = torch.bfloat16 if args.precision == "bf16" else torch.float16
+    trainable_names = {n for n, p_ in model.named_parameters() if p_.requires_grad}
     weight = class_weights(y_all[tr_idx], args.class_weight)
     weight = weight.to(device) if weight is not None else None
     no_decay = ("bias", "LayerNorm.weight", "layer_norm.weight")
     params = [
-        {"params": [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)], "weight_decay": args.weight_decay},
-        {"params": [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)], "weight_decay": 0.0},
+        {"params": [p for n, p in model.named_parameters() if p.requires_grad and not any(nd in n for nd in no_decay)], "weight_decay": args.weight_decay},
+        {"params": [p for n, p in model.named_parameters() if p.requires_grad and any(nd in n for nd in no_decay)], "weight_decay": 0.0},
     ]
+    params = [g for g in params if g["params"]]
     optimizer = torch.optim.AdamW(params, lr=args.lr)
     steps_per_epoch = math.ceil(len(tr_idx) / args.batch_size)
     total_steps = steps_per_epoch * args.epochs
     scheduler = get_linear_schedule_with_warmup(optimizer, int(args.warmup_ratio * total_steps), total_steps)
-    scaler = torch.amp.GradScaler(device.type) if (use_amp and device.type in ("mps", "cuda")) else None
+    scaler = torch.amp.GradScaler(device.type) if (use_amp and args.precision == "fp16" and device.type in ("mps", "cuda")) else None
+    eval_bs = args.eval_batch_size or args.batch_size
     eval_interval = max(1, int(round(steps_per_epoch * args.eval_every)))
     pad_id = tokenizer.pad_token_id
 
@@ -288,11 +337,11 @@ def train_fold(k, args, df, encoded_train, encoded_test, tokenizer, device, use_
             t0 = time.perf_counter()
             ids, mask, y = ids.to(device), mask.to(device), y.to(device)
             optimizer.zero_grad(set_to_none=True)
-            with torch.autocast(device_type=device.type, dtype=torch.float16, enabled=use_amp):
+            with torch.autocast(device_type=device.type, dtype=amp_dtype, enabled=use_amp):
                 logits = model(input_ids=ids, attention_mask=mask).logits
             loss = F.cross_entropy(logits.float(), y, weight=weight, label_smoothing=args.label_smoothing)
             if not torch.isfinite(loss):
-                raise FloatingPointError(f"non-finite loss at step {step} (precision {'fp16' if use_amp else 'fp32'})")
+                raise FloatingPointError(f"non-finite loss at step {step} (precision {args.precision if use_amp else 'fp32'})")
             if scaler is not None:
                 scaler.scale(loss).backward()
                 scaler.unscale_(optimizer)
@@ -314,7 +363,7 @@ def train_fold(k, args, df, encoded_train, encoded_test, tokenizer, device, use_
                 t1 = time.perf_counter()
                 if device.type == "mps":
                     torch.mps.empty_cache()  # drop cached blocks before the eval pass; keeps allocator fragmentation in check
-                val_probs = predict(model, va_idx, encoded_train, args.batch_size, pad_id, device, use_amp)
+                val_probs = predict(model, va_idx, encoded_train, eval_bs, pad_id, device, use_amp, amp_dtype)
                 m = compute_metrics(y_all[va_idx], val_probs, 0.5)
                 eval_time += time.perf_counter() - t1
                 point = {"fold": k, "step": step, "epoch": round(step / steps_per_epoch, 3), "train_loss": run_loss / n_loss,
@@ -325,15 +374,16 @@ def train_fold(k, args, df, encoded_train, encoded_test, tokenizer, device, use_
                 improved = m["macro_f1"] > best["macro_f1"]
                 if improved:
                     best = {"macro_f1": m["macro_f1"], "step": step, "epoch": point["epoch"], "val_probs": val_probs,
-                            "state": {n: t.detach().to("cpu", copy=True) for n, t in model.state_dict().items()}}
+                            "state": {n: t.detach().to("cpu", copy=True) for n, t in model.state_dict().items() if n in trainable_names}}  # trainable tensors only (all of them without --lora)
                 log(f"  fold {k} ep {point['epoch']:.2f} step {step}/{total_steps} loss {point['train_loss']:.4f} | val acc {m['accuracy']:.4f} mF1 {m['macro_f1']:.4f} F1neg {m['f1_neg']:.4f} AUC {m['roc_auc']:.4f}{' *' if improved else ''}")
                 run_loss, n_loss = 0.0, 0
 
-    model.load_state_dict(best["state"])
+    model.load_state_dict(best["state"], strict=False)
     t2 = time.perf_counter()
-    test_probs = predict(model, te_idx, encoded_test, args.batch_size, pad_id, device, use_amp)
+    test_probs = predict(model, te_idx, encoded_test, eval_bs, pad_id, device, use_amp, amp_dtype)
     infer_test_s = time.perf_counter() - t2
-    n_params = sum(p.numel() for p in model.parameters())
+    n_params_total = sum(p.numel() for p in model.parameters())
+    n_params = sum(p.numel() for p in model.parameters() if p.requires_grad)  # trainable (= total without --lora)
     hidden_size = int(getattr(model.config, "hidden_size", getattr(model.config, "dim", 0)))
     mem = device_mem_mb(device)
     del model, optimizer, scheduler, best["state"]
@@ -342,7 +392,7 @@ def train_fold(k, args, df, encoded_train, encoded_test, tokenizer, device, use_
         "fold": k, "va_idx": va_idx, "te_idx": te_idx, "oof_probs": best["val_probs"], "oof_probs_last": last_val_probs, "test_probs": test_probs,
         "n_train": int(len(tr_idx)), "best_step": best["step"], "best_epoch": best["epoch"], "total_steps": total_steps, "curve": curve,
         "train_s": train_time, "eval_s": eval_time, "infer_test_s": infer_test_s, "fold_wall_s": time.perf_counter() - t_fold,
-        "n_params": n_params, "hidden_size": hidden_size, "device_mem_mb": mem, "precision": "fp16" if use_amp else "fp32",
+        "n_params": n_params, "n_params_total": n_params_total, "hidden_size": hidden_size, "device_mem_mb": mem, "precision": args.precision if use_amp else "fp32",
     }
 
 
@@ -366,7 +416,9 @@ def load_fold(path: Path, signature: str) -> dict | None:
 def main(argv=None):
     args = parse_args(argv)
     device = pick_device(args.device)
-    use_amp = args.precision == "fp16" and device.type in ("mps", "cuda")
+    use_amp = args.precision in ("fp16", "bf16") and device.type in ("mps", "cuda")
+    if args.precision == "bf16" and device.type == "cuda" and not torch.cuda.is_bf16_supported():
+        raise SystemExit("bf16 autocast is not supported on this GPU; use --precision fp32 (or fp16 for models that tolerate it)")
     t_start = time.perf_counter()
     log = functools.partial(print, flush=True)
     run_id = run_id_for(args)
@@ -379,7 +431,7 @@ def main(argv=None):
             (RESULTS_DIR / sub).mkdir(parents=True, exist_ok=True)
         if (summary_dir / f"{run_id}.json").exists():
             log(f"note: replacing existing run {run_id}")
-    log(f"model {args.model} | device {device} | precision {'fp16' if use_amp else 'fp32'} | run {run_id}{' [PARTIAL]' if args.partial else ''} | seed {args.seed}")
+    log(f"model {args.model} | device {device} | precision {args.precision if use_amp else 'fp32'} | load dtype {args.load_dtype}{' | LoRA r=' + str(args.lora_r) if args.lora else ''}{' | grad ckpt' if args.gradient_checkpointing else ''} | run {run_id}{' [PARTIAL]' if args.partial else ''} | seed {args.seed}")
 
     df = load_train_folds()
     test = load_test()
@@ -488,7 +540,8 @@ def main(argv=None):
         "oof_at_0.5": oof_05, "oof_at_0.5_last": oof_05_last,
         "threshold": thr, "oof_at_threshold": oof_thr, "oof_at_threshold_nested": oof_nested, "test_pred_pos_ratio": test_pred_pos_ratio,
         "resources": {
-            "feature_dim": int(fold_results[0]["hidden_size"]), "n_params": int(fold_results[0]["n_params"]),
+            "feature_dim": int(fold_results[0]["hidden_size"]), "n_params": int(fold_results[0]["n_params"]), "n_params_total": int(fold_results[0]["n_params_total"]),
+            "lora": {"r": args.lora_r, "alpha": args.lora_alpha, "dropout": args.lora_dropout, "target": args.lora_target} if args.lora else None,
             "tokenize_train_s": t_tok_train.seconds, "tokenize_test_s": t_tok_test.seconds,
             "train_steps_s_total": train_steps_s, "eval_s_total": eval_s, "train_s_total": train_s_total,
             "train_s_per_epoch": train_steps_s / (len(folds) * args.epochs),

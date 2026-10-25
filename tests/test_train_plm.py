@@ -87,6 +87,34 @@ def test_class_weights_and_batches():
     assert batches[0][3].tolist() == [1, 0, 0]
 
 
+def test_lora_trainable_subset_and_pad_token():
+    import torch
+    from transformers import AutoTokenizer
+    args = T.parse_args(["--model", "distilbert-base-uncased", "--lora", "--lora-r", "4", "--no-save", "--folds", "0", "--limit", "8"])
+    tok = AutoTokenizer.from_pretrained(args.model)
+    model = T.load_model(args, tok)
+    total = sum(p.numel() for p in model.parameters()); trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    names = {n for n, p in model.named_parameters() if p.requires_grad}
+    assert 0 < trainable < 0.05 * total, (trainable, total)
+    assert any("lora" in n for n in names) and any("classifier" in n or "pre_classifier" in n or "score" in n for n in names), names
+    assert model.config.pad_token_id == tok.pad_token_id
+    assert args.name.endswith("_lora4")
+    assert T.LORA_TARGETS["qwen"] == ["q_proj", "k_proj", "v_proj", "o_proj"]
+
+
+def test_frozen_pooling_padding_invariant():
+    import torch
+    from transformers import AutoModel, AutoTokenizer
+    from src import train_frozen as FZ
+    tok = AutoTokenizer.from_pretrained("distilbert-base-uncased")
+    model = AutoModel.from_pretrained("distilbert-base-uncased").eval()
+    enc, _ = T.encode_texts(tok, ["a short one", "this one is quite a bit longer than the other sentence here"], 32, "head_tail", 0.75)
+    for pooling in ("mean", "last", "cls"):
+        together = FZ.extract(model, enc, tok.pad_token_id, 2, torch.device("cpu"), pooling, torch.float32, lambda *a: None)
+        alone = [FZ.extract(model, [e], tok.pad_token_id, 1, torch.device("cpu"), pooling, torch.float32, lambda *a: None)[0] for e in enc]
+        assert all(abs(together[i] - alone[i]).max() < 1e-4 for i in range(2)), pooling
+
+
 if __name__ == "__main__":
     import inspect, sys
     failed = 0

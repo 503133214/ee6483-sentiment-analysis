@@ -14,7 +14,12 @@ NTU EE6483 Artificial Intelligence and Data Mining 课程项目：根据英文�
 |---|---|---|---|
 | TF-IDF + NOT_ + LR | 0.927 ± 0.001 | 0.854 ± 0.001 | 0.752 |
 | GloVe + BiLSTM | 0.930 ± 0.007 | 0.860 ± 0.013 | 0.761 |
-| **RoBERTa-base** | **0.962 ± 0.003** | **0.923 ± 0.006** | **0.868** |
+| RoBERTa-base | 0.962 ± 0.003 | 0.923 ± 0.006 | 0.868 |
+| DeBERTa-v3-base (Colab L4, bf16) | 0.967 ± 0.002 | 0.934 ± 0.004 | 0.887 |
+| Qwen2.5-0.5B + LoRA r=16 (Colab L4) | 0.967 ± 0.002 | 0.932 ± 0.004 | 0.884 |
+| **Qwen2.5-1.5B + LoRA r=16 (Colab L4)** | **0.970 ± 0.002** | **0.940 ± 0.005** | **0.897** |
+
+RoBERTa-base 另在 Colab L4 上以 seed 2024、7 重复，三个 seed 的 macro-F1 为 0.923, 0.923, 0.924（均值 0.923，标准差 0.001）。同一模型只抽特征再接逻辑回归时明显更差：RoBERTa-base 冻结 mean 池化 + LR macro-F1 0.848，Qwen2.5-1.5B 冻结末 token + LR 0.827。
 
 神经模型在留出折选择 checkpoint，并记录末轮预测作对照。完整五折表、两折扫参、资源计时、阈值分析和评估口径统一维护在 [实验结果](docs/experiment_results.md)。
 
@@ -67,6 +72,29 @@ python -m src.train_rnn --arch bilstm --name glove_bilstm
 python -m src.train_rnn --arch textcnn --name glove_textcnn
 python -m src.train_rnn --arch bilstm --name rand_bilstm --no-pretrained
 bash scripts/rnn_runs.sh
+```
+
+在 Google Colab 的 GPU 上跑大模型实验（DeBERTa-v3 需要 bf16；Qwen2.5 用 LoRA；`train_frozen.py` 用冻结模型抽特征再接逻辑回归）。本机需安装并登录 `google-colab-cli`；队列定义在 `scripts/colab_chain.sh`，训练在 VM 上以后台进程运行，`colab exec` 只用于启动和轮询：
+
+```bash
+colab new -s ee6483 --gpu L4                                   # L4 24 GB, 支持 bf16, 约 4.8 计算单元/小时
+colab install -s ee6483 peft
+echo 'import subprocess,sys; subprocess.run([sys.executable,"-m","pip","uninstall","-y","torchao"])' | colab exec -s ee6483   # 预装的 torchao 0.10 与 peft 冲突
+tar czf /tmp/project.tar.gz --exclude=__pycache__ --exclude=.DS_Store src scripts data/raw/train.json data/raw/test.json data/folds.csv results/runs.csv requirements.txt
+colab upload -s ee6483 /tmp/project.tar.gz /content/project.tar.gz
+colab exec -s ee6483 -f scripts/colab_launch.py                # 解压并后台启动 scripts/colab_chain.sh
+colab exec -s ee6483 -f scripts/colab_poll.py                  # 查看进度、当前任务日志、已完成的 runs.csv 行
+colab download -s ee6483 /content/project/results/summary/<run_id>.json results/summary/<run_id>.json   # 结果取回 (oof / test_probs / summary / curves / thresholds)
+colab stop -s ee6483                                           # 结束计费
+```
+
+单个实验的本地等价命令（在有 CUDA/bf16 的机器上直接运行）：
+
+```bash
+python -m src.train_plm --model microsoft/deberta-v3-base --name deberta_v3_base_len256 --lr 2e-5 --max-len 256 --batch-size 16 --precision bf16
+python -m src.train_plm --model Qwen/Qwen2.5-1.5B --name qwen2.5_1.5b_lora16_len256 --lora --lora-r 16 --lr 2e-4 --max-len 256 --batch-size 16 --precision bf16 --load-dtype bf16 --gradient-checkpointing
+python -m src.train_frozen --model Qwen/Qwen2.5-1.5B --pooling last --load-dtype bf16 --name qwen2.5_1.5b_frozen_last_lr
+python -m src.train_frozen --model roberta-base --pooling mean --name roberta_base_frozen_mean_lr
 ```
 
 `--folds 0,1` 或 `--limit` 表示部分运行，需搭配 `--no-save` 或 `--allow-partial`；后者使用带 `_f0-1` / `_n64` 等后缀的 `run_id` 保存产物。TF-IDF 消融参数包括 `--no-negation`、`--class-weight none`、`--C 1`、`--ngram-max 1` 和 `--min-df 1`。
