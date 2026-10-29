@@ -1,8 +1,8 @@
 # EE6483 商品评论情感分类
 
-NTU EE6483 Artificial Intelligence and Data Mining 课程项目：根据英文商品评论预测情感，`0` 表示负面，`1` 表示正面。项目比较 TF-IDF、预训练词向量和预训练语言模型三类表示，重点考察**负面评论识别能力与计算成本的权衡**。
+NTU EE6483 Artificial Intelligence and Data Mining 课程项目：根据英文商品评论预测情感，`0` 表示负面，`1` 表示正面。项目在同一组数据划分上比较五个层次的文本表示——TF-IDF、预训练词向量、编码器微调、解码器 LLM 的 LoRA 微调和 27B LLM 零样本——回答一个问题：**在正类占 85.4% 的评论数据上，负面评论识别能力随表示能力如何提升，每一级要付出多少计算成本。**
 
-在去重后的 7,185 条训练评论和共享的 5 折划分上，RoBERTa-base 达到 **0.962 accuracy、0.923 macro-F1 和 0.868 负类 F1**。相较于带否定标记的 TF-IDF + Logistic Regression，macro-F1 提高 **6.83 个百分点**，负类 F1 提高 **11.60 个百分点**。TF-IDF 则以约 1.14 秒的五折向量化与拟合时间取得 0.854 macro-F1，为低成本方案提供参照。
+在去重后的 7,185 条训练评论和共享的 5 折划分上，LoRA 微调的小型解码器 LLM 取得全部微调模型中的最高指标：Qwen3.5-2B-Base + LoRA 达到 **0.971 accuracy、0.942 macro-F1 和 0.902 负类 F1**，Qwen2.5-1.5B + LoRA（当前提交模型）达到 0.970 / 0.940 / 0.897，可训练参数只占全模型的 0.28%。相较于带否定标记的 TF-IDF + Logistic Regression（0.854 macro-F1，五折向量化与拟合 1.14 秒），macro-F1 提高 **8.79 / 8.55 个百分点**，负类 F1 提高 **14.97 / 14.53 个百分点**。不训练、不看标签的 Qwen3.8-27B 零样本分类在阈值 0.5 下与之持平（0.940 macro-F1），用训练标签校准阈值后达到 0.976 accuracy / 0.953 macro-F1（嵌套估计 0.975 / 0.951）；LoRA 模型的单模型推理比它快 8.7 到 13.8 倍。
 
 完整指标与方法口径见 [实验结果](docs/experiment_results.md)，报告组织与后续安排见 [项目建议](docs/project_advice.md)。
 
@@ -17,11 +17,11 @@ NTU EE6483 Artificial Intelligence and Data Mining 课程项目：根据英文�
 | RoBERTa-base | 0.962 ± 0.003 | 0.923 ± 0.006 | 0.868 |
 | DeBERTa-v3-base (Colab L4, bf16) | 0.967 ± 0.002 | 0.934 ± 0.004 | 0.887 |
 | Qwen2.5-0.5B + LoRA r=16 (Colab L4) | 0.967 ± 0.002 | 0.932 ± 0.004 | 0.884 |
-| **Qwen2.5-1.5B + LoRA r=16 (Colab L4)** | **0.970 ± 0.002** | **0.940 ± 0.005** | **0.897** |
+| **Qwen2.5-1.5B + LoRA r=16 (Colab L4，提交模型)** | **0.970 ± 0.002** | **0.940 ± 0.005** | **0.897** |
 | Qwen3.5-2B-Base + LoRA r=16 (Colab A100) | 0.971 ± 0.003 | 0.942 ± 0.005 | 0.902 |
 | Qwen3.8-27B 零样本, 4-bit, 阈值 0.5 (Colab A100) | 0.968 ± 0.003 | 0.940 ± 0.005 | 0.898 |
 
-RoBERTa-base 另在 Colab L4 上以 seed 2024、7 重复，三个 seed 的 macro-F1 为 0.923, 0.923, 0.924（均值 0.923，标准差 0.001）。Qwen3.8 系列没有小模型（最小的 Qwen3.8-27B 是 27B 多模态后训练模型，bf16 权重 55.6 GB），因此用 4-bit 量化做零样本分类：不训练、不看任何标签，仅靠提示词读取 "positive/negative" 的 logits，阈值 0.5 下 macro-F1 0.940；若用训练标签校准阈值（0.17），acc 0.976 / macro-F1 0.953（嵌套估计 0.975 / 0.951），是全部实验中最高的。同架构（qwen3_5）最小的 Base 模型 Qwen3.5-2B-Base + LoRA 的结果与 Qwen2.5-1.5B 持平。同一模型只抽特征再接逻辑回归时明显更差：RoBERTa-base 冻结 mean 池化 + LR macro-F1 0.848，Qwen2.5-1.5B 冻结末 token + LR 0.827。
+RoBERTa-base 的三个训练 seed（42 本机 MPS fp16；2024、7 Colab L4 bf16）macro-F1 为 0.923, 0.923, 0.924（均值 0.923，标准差 0.001），说明共享划分下的结果跨 seed、跨硬件稳定。Qwen3.8-27B（4-bit nf4，thinking 关闭）作为不训练、不看标签的零样本对照，只靠固定提示词读取 “positive / negative” 标签词的 logits：阈值 0.5 下 macro-F1 0.940、ROC-AUC 0.988；用训练标签校准阈值（0.17）后 accuracy 0.976 / macro-F1 0.953（嵌套估计 0.975 / 0.951），是全部实验中最高的。同架构（qwen3_5）最小的 Base 模型 Qwen3.5-2B-Base + LoRA 以 620 万可训练参数取得微调模型中最高的 0.942 macro-F1 和 0.902 负类 F1。收益来自任务微调而非预训练表示本身：同一个 RoBERTa-base 微调比冻结 mean 池化 + LR（0.848）高 7.49 个百分点，Qwen2.5-1.5B 的 LoRA 微调比冻结末 token + LR（0.827）高 11.34 个百分点。
 
 神经模型在留出折选择 checkpoint，并记录末轮预测作对照。完整五折表、两折扫参、资源计时、阈值分析和评估口径统一维护在 [实验结果](docs/experiment_results.md)。
 
@@ -76,15 +76,16 @@ python -m src.train_rnn --arch bilstm --name rand_bilstm --no-pretrained
 bash scripts/rnn_runs.sh
 ```
 
-在 Google Colab 的 GPU 上跑大模型实验（DeBERTa-v3 需要 bf16；Qwen2.5 用 LoRA；`train_frozen.py` 用冻结模型抽特征再接逻辑回归）。本机需安装并登录 `google-colab-cli`；队列定义在 `scripts/colab_chain.sh`，训练在 VM 上以后台进程运行，`colab exec` 只用于启动和轮询：
+在 Google Colab 的 GPU 上跑大模型实验（DeBERTa-v3 需要 bf16；Qwen 用 LoRA；`train_frozen.py` 用冻结模型抽特征再接逻辑回归；`llm_zero_shot.py` 做 27B 零样本分类）。本机需安装并登录 `google-colab-cli`；L4 队列定义在 `scripts/colab_chain.sh`，A100 队列（Qwen3.8-27B 零样本、Qwen3.5-2B-Base LoRA）在 `scripts/colab_chain_qwen3.sh`，训练在 VM 上以后台进程运行，`colab exec` 只用于启动和轮询：
 
 ```bash
-colab new -s ee6483 --gpu L4                                   # L4 24 GB, 支持 bf16, 约 4.8 计算单元/小时
+colab new -s ee6483 --gpu L4                                   # L4 24 GB, 支持 bf16, 本次实测约 1.5 计算单元/小时
 colab install -s ee6483 peft
 echo 'import subprocess,sys; subprocess.run([sys.executable,"-m","pip","uninstall","-y","torchao"])' | colab exec -s ee6483   # 预装的 torchao 0.10 与 peft 冲突
 tar czf /tmp/project.tar.gz --exclude=__pycache__ --exclude=.DS_Store src scripts data/raw/train.json data/raw/test.json data/folds.csv results/runs.csv requirements.txt
 colab upload -s ee6483 /tmp/project.tar.gz /content/project.tar.gz
-colab exec -s ee6483 -f scripts/colab_launch.py                # 解压并后台启动 scripts/colab_chain.sh
+colab exec -s ee6483 -f scripts/colab_launch.py                # 解压并后台启动 scripts/colab_chain.sh（L4 队列）
+colab exec -s ee6483 --env CHAIN=scripts/colab_chain_qwen3.sh -f scripts/colab_launch.py   # A100 队列（会话需用 colab new -s ee6483 --gpu A100 创建）
 colab exec -s ee6483 -f scripts/colab_poll.py                  # 查看进度、当前任务日志、已完成的 runs.csv 行
 colab download -s ee6483 /content/project/results/summary/<run_id>.json results/summary/<run_id>.json   # 结果取回 (oof / test_probs / summary / curves / thresholds)
 colab stop -s ee6483                                           # 结束计费
@@ -97,6 +98,9 @@ python -m src.train_plm --model microsoft/deberta-v3-base --name deberta_v3_base
 python -m src.train_plm --model Qwen/Qwen2.5-1.5B --name qwen2.5_1.5b_lora16_len256 --lora --lora-r 16 --lr 2e-4 --max-len 256 --batch-size 16 --precision bf16 --load-dtype bf16 --gradient-checkpointing
 python -m src.train_frozen --model Qwen/Qwen2.5-1.5B --pooling last --load-dtype bf16 --name qwen2.5_1.5b_frozen_last_lr
 python -m src.train_frozen --model roberta-base --pooling mean --name roberta_base_frozen_mean_lr
+python -m src.train_plm --model Qwen/Qwen3.5-2B-Base --name qwen3.5_2b_base_lora16_len256 --lora --lora-r 16 --lora-alpha 32 --lr 2e-4 --epochs 3 --max-len 256 --batch-size 16 --precision bf16 --load-dtype bf16 --eval-batch-size 32
+python -m src.llm_zero_shot --model Qwen/Qwen3.8-27B --quant 4bit --name qwen3.8_27b_zeroshot_4bit --batch-size 16   # 零样本，不训练；阈值 0.5 为纯零样本点
+python -m scripts.label_noise_candidates   # 零样本 LLM 以 ≥ 95% 置信度反对训练标签的 92 条名单，并记录三个监督模型 OOF 中与 LLM 一致的个数（57 条全部一致）
 ```
 
 `--folds 0,1` 或 `--limit` 表示部分运行，需搭配 `--no-save` 或 `--allow-partial`；后者使用带 `_f0-1` / `_n64` 等后缀的 `run_id` 保存产物。TF-IDF 消融参数包括 `--no-negation`、`--class-weight none`、`--C 1`、`--ngram-max 1` 和 `--min-df 1`。
@@ -112,7 +116,7 @@ python -m tests.test_results
 
 ## 提交文件
 
-当前 `submissions/submission.csv` 的预测与 `qwen2.5_1.5b_lora16_len256_seed42`（Qwen2.5-1.5B + LoRA，Colab L4）五折测试概率在 OOF 阈值 0.45 下的输出一致，预测正类比例为 86.17%（训练先验 85.40%）；与此前 TF-IDF 版本的预测一致率为 94.4%，与 RoBERTa-base 为 97.5%，与 DeBERTa-v3-base 为 98.1%。该模型的 OOF 指标为 accuracy 0.9706、macro-F1 0.9404（嵌套阈值估计 0.9676 / 0.9357）。其他模型的五折测试概率也已保存，可用以下命令生成对应的提交文件并与当前文件比较：
+当前 `submissions/submission.csv` 的预测与 `qwen2.5_1.5b_lora16_len256_seed42`（Qwen2.5-1.5B + LoRA，Colab L4）五折测试概率在 OOF 阈值 0.45 下的输出一致，预测正类比例为 86.17%（训练先验 85.40%）。该模型的 OOF 指标为 accuracy 0.9706、macro-F1 0.9404（嵌套阈值估计 0.9676 / 0.9357）。与其他模型各自阈值下预测的一致率：Qwen3.5-2B-Base + LoRA 98.5%，DeBERTa-v3-base 98.1%，Qwen3.8-27B 零样本（校准阈值 0.17）97.7%，RoBERTa-base 97.5%，TF-IDF 94.4%——四个预训练模型与提交文件的一致率均在 97.5% 以上。其他模型的五折测试概率也已保存，可用以下命令生成对应的提交文件并与当前文件比较：
 
 ```bash
 python -m src.make_submission --summary results/summary/qwen2.5_1.5b_lora16_len256_seed42.json --compare submissions/submission.csv   # 重新生成当前版本
@@ -131,11 +135,11 @@ python -m src.make_submission --summary results/summary/tfidf_lr_neg_seed42.json
 
 ## 报告完善与后续实验
 
-当前已有三类特征的完整五折结果、否定标记与词向量初始化消融，以及资源记录。后续工作优先补强核心结论：
+当前已有五个层次表示的完整五折结果、否定标记与词向量初始化消融、微调与冻结特征对照、RoBERTa 三 seed 复现、27B 零样本对照以及资源记录。后续工作集中在把证据写成报告：
 
-1. **多 seed 稳定性。** 分别以 `--seed 2024`、`--seed 7` 运行 RoBERTa，报告不同训练 seed 的均值与标准差。
-2. **机制与错例。** 对照 TF-IDF 与 RoBERTa 的 OOF 预测，分析否定、转折和混合情感；按课程 f) 要求补充 1–2 条测试集案例，注明人工判断依据；用固定标注规则复核疑似标签分歧。
-3. **表示方式对照。** 补充冻结 RoBERTa 特征 + LR，检验同一预训练模型下任务微调的作用。其他模型扩展按报告论证需要安排。
+1. **错例与标签分歧分析。** 以 `results/analysis/label_noise_candidates.csv`（92 条零样本 LLM 高置信分歧，其中 57 条 TF-IDF、RoBERTa、Qwen2.5-1.5B LoRA 的 OOF 预测一致）为起点，按固定标注规则复核；对照 TF-IDF 与 LoRA 模型的 OOF 混淆矩阵分析否定、转折和混合情感；按课程 f) 要求补充 1–2 条测试集案例。
+2. **最终提交配置。** 确认报告模型与 `submission.csv` 对应（当前为 Qwen2.5-1.5B + LoRA，OOF 阈值 0.45），记录 run_id、seed、阈值和生成命令。
+3. **报告成文。** 资源散点图（横轴对数训练时间、纵轴 macro-F1）与 a–i 各节按 [项目建议](docs/project_advice.md) 组织。
 
 具体章节证据、人员分工与里程碑见 [项目建议](docs/project_advice.md)。
 
@@ -157,16 +161,19 @@ python -m src.make_submission --summary results/summary/tfidf_lr_neg_seed42.json
 │   ├── data.py / metrics.py          # 数据协议、指标与阈值规则
 │   ├── features/negation.py          # NOT_ 否定范围标记
 │   ├── train_tfidf.py                # TF-IDF + LR
-│   ├── train_plm.py                  # 预训练语言模型微调
+│   ├── train_plm.py                  # 预训练语言模型微调（全参数或 LoRA）
+│   ├── train_frozen.py               # 冻结模型特征 + 逻辑回归
+│   ├── llm_zero_shot.py              # LLM 零样本分类（标签词 logits）
 │   ├── train_rnn.py                  # GloVe + BiLSTM / TextCNN
 │   ├── utils/                       # 资源测量与结果保存
 │   └── make_submission.py / check_submission.py
-├── scripts/                         # PLM 与词向量模型实验驱动
+├── scripts/                         # 扫参、Colab 队列（L4 / A100）与标签分歧名单脚本
 ├── results/
 │   ├── runs.csv                     # 每个 run_id 一行汇总
 │   ├── oof/                         # 去重训练集顺序下的折外概率
 │   ├── test_probs/                  # 各折平均后的测试概率
-│   └── summary/                     # 配置、指标、阈值与训练曲线
+│   ├── summary/                     # 配置、指标、阈值与训练曲线
+│   └── analysis/                    # 标签分歧候选名单（label_noise_candidates.csv）
 ├── tests/                           # 现有回归测试
 ├── submissions/                     # 课程模板与预测提交文件
 ├── environment.yml
